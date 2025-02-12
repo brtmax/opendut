@@ -8,34 +8,32 @@ use tokio::time::sleep;
 use tracing::{error, trace};
 
 
-pub fn spawn_cluster_ping(peers: HashMap<PeerId, IpAddr>, ping_interval_ms: Duration) {
+pub async fn spawn_cluster_ping(peers: HashMap<PeerId, IpAddr>, ping_interval_ms: Duration) {
 
     let meter = global::meter(opendut_util::telemetry::DEFAULT_METER_NAME);
     let rtt = meter.f64_gauge("round_trip_time").build();
 
     let rtt_mutex = Arc::new(Mutex::new(rtt));
 
-    tokio::spawn(async move { //TODO terminate this thread when the remote IP changes
-        let data = [1, 2, 3, 4];
-        let options = ping_rs::PingOptions { ttl: 128, dont_fragment: true };
+    let data = [1, 2, 3, 4];
+    let options = ping_rs::PingOptions { ttl: 128, dont_fragment: true };
 
-        loop {
-            sleep(ping_interval_ms).await;
-            let timeout = Duration::from_secs(1); //TODO make configurable
+    loop {
+        sleep(ping_interval_ms).await;
+        let timeout = Duration::from_secs(1); //TODO make configurable
 
-            for (peer_id, vpn_address) in &peers {
-                let remote_address = vpn_address;
-                let result = ping_rs::send_ping(remote_address, timeout, &data, Some(&options));
+        for (peer_id, vpn_address) in &peers {
+            let remote_address = vpn_address;
+            let result = ping_rs::send_ping(remote_address, timeout, &data, Some(&options));
 
-                match result {
-                    Ok(reply) => {
-                        rtt_mutex.lock().await
-                            .record(reply.rtt as f64, &[KeyValue::new("peer_ip_address", remote_address.to_string())]);
-                        trace!("Reply from {}: bytes={} time={}ms TTL={}", reply.address, data.len(), reply.rtt, options.ttl)
-                    },
-                    Err(cause) => error!("Error while pinging peer {peer_id} with IP {peer_ip}: {cause:?}", peer_ip=remote_address)
-                }
+            match result {
+                Ok(reply) => {
+                    rtt_mutex.lock().await
+                        .record(reply.rtt as f64, &[KeyValue::new("peer_ip_address", remote_address.to_string())]);
+                    trace!("Reply from {}: bytes={} time={}ms TTL={}", reply.address, data.len(), reply.rtt, options.ttl)
+                },
+                Err(cause) => error!("Error while pinging peer {peer_id} with IP {peer_ip}: {cause:?}", peer_ip=remote_address)
             }
         }
-    });
+    }
 }
