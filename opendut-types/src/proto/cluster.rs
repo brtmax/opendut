@@ -1,45 +1,76 @@
+use crate::conversion;
 use crate::proto::{ConversionError, ConversionErrorBuilder};
 use crate::proto::topology::DeviceId;
 
 include!(concat!(env!("OUT_DIR"), "/opendut.types.cluster.rs"));
 
-impl From<crate::cluster::ClusterId> for ClusterId {
-    fn from(value: crate::cluster::ClusterId) -> Self {
-        Self {
+conversion! {
+    type Model = crate::cluster::ClusterId;
+    type Proto = ClusterId;
+
+    Model -> Proto: |value: Model| {
+        Proto {
             uuid: Some(value.0.into())
         }
-    }
-}
-
-impl TryFrom<ClusterId> for crate::cluster::ClusterId {
-    type Error = ConversionError;
-
-    fn try_from(value: ClusterId) -> Result<Self, Self::Error> {
-        type ErrorBuilder = ConversionErrorBuilder<ClusterId, crate::cluster::ClusterId>;
-
+    },
+    Model <- Proto: |value: Proto| {
         value.uuid
-            .ok_or(ErrorBuilder::field_not_set("uuid"))
-            .map(|uuid| Self(uuid.into()))
-    }
+            .ok_or(Error::field_not_set("uuid"))
+            .map(|uuid| Self(uuid.into())) //TODO Self not self-explanatory
+    },
 }
 
-impl From<crate::cluster::ClusterName> for ClusterName {
-    fn from(value: crate::cluster::ClusterName) -> Self {
-        Self {
+// impl From<crate::cluster::ClusterId> for ClusterId {
+//     fn from(value: crate::cluster::ClusterId) -> Self {
+//         Self {
+//             uuid: Some(value.0.into())
+//         }
+//     }
+// }
+//
+// impl TryFrom<ClusterId> for crate::cluster::ClusterId {
+//     type Error = ConversionError;
+//
+//     fn try_from(value: ClusterId) -> Result<Self, Self::Error> {
+//         type ErrorBuilder = ConversionErrorBuilder<ClusterId, crate::cluster::ClusterId>;
+//
+//         value.uuid
+//             .ok_or(ErrorBuilder::field_not_set("uuid"))
+//             .map(|uuid| Self(uuid.into()))
+//     }
+// }
+
+// impl From<crate::cluster::ClusterName> for ClusterName {
+//     fn from(value: crate::cluster::ClusterName) -> Self {
+//         Self {
+//             value: value.0
+//         }
+//     }
+// }
+//
+// impl TryFrom<ClusterName> for crate::cluster::ClusterName {
+//     type Error = ConversionError;
+//
+//     fn try_from(value: ClusterName) -> Result<Self, Self::Error> {
+//         type ErrorBuilder = ConversionErrorBuilder<ClusterName, crate::cluster::ClusterName>;
+//
+//         crate::cluster::ClusterName::try_from(value.value)
+//             .map_err(|cause| ErrorBuilder::message(cause.to_string()))
+//     }
+// }
+conversion! {
+    type Model = crate::cluster::ClusterName;
+    type Proto = ClusterName;
+
+    Model -> Proto: |value: Model| {
+        Proto {
             value: value.0
         }
-    }
-}
-
-impl TryFrom<ClusterName> for crate::cluster::ClusterName {
-    type Error = ConversionError;
-
-    fn try_from(value: ClusterName) -> Result<Self, Self::Error> {
-        type ErrorBuilder = ConversionErrorBuilder<ClusterName, crate::cluster::ClusterName>;
-
+    },
+    Model <- Proto: |value: Proto| {
         crate::cluster::ClusterName::try_from(value.value)
-            .map_err(|cause| ErrorBuilder::message(cause.to_string()))
-    }
+            .map_err(|cause| Error::message(cause.to_string()))
+    },
 }
 
 impl From<crate::cluster::ClusterConfiguration> for ClusterConfiguration {

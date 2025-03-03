@@ -40,3 +40,35 @@ impl<From, To> ConversionErrorBuilder<From, To> {
         ConversionError::new::<From, To>(details)
     }
 }
+
+#[macro_export]
+macro_rules! conversion {
+    (
+        type Model = $Model:ty;
+        type Proto = $Proto:ty;
+        Model -> Proto: $model_to_proto:expr,
+        Model <- Proto: $proto_to_model:expr$(,)?
+    ) => {
+        impl From<$Model> for $Proto {
+            fn from(value: $Model) -> Self {
+                type Model = $Model;
+                type Proto = $Proto;
+
+                $model_to_proto(value)
+            }
+        }
+
+        impl TryFrom<$Proto> for $Model {
+            type Error = ConversionError;
+
+            fn try_from(value: $Proto) -> Result<Self, Self::Error> {
+                type Model = $Model;
+                type Proto = $Proto;
+
+                type Error = ConversionErrorBuilder<Proto, Model>;
+
+                $proto_to_model(value)
+            }
+        }
+    }
+}

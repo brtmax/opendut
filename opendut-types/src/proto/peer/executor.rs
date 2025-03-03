@@ -1,3 +1,4 @@
+use crate::conversion;
 use crate::proto::{ConversionError, ConversionErrorBuilder};
 
 include!(concat!(env!("OUT_DIR"), "/opendut.types.peer.executor.rs"));
@@ -161,25 +162,42 @@ impl TryFrom<ExecutorDescriptor> for crate::peer::executor::ExecutorDescriptor {
     }
 }
 
-impl From<crate::peer::executor::ExecutorId> for ExecutorId {
-    fn from(value: crate::peer::executor::ExecutorId) -> Self {
-        Self {
+
+conversion! {
+    type Model = crate::peer::executor::ExecutorId;
+    type Proto = ExecutorId;
+
+    Model -> Proto: |value: Model| {
+        Proto {
             uuid: Some(value.uuid.into())
         }
-    }
-}
-
-impl TryFrom<ExecutorId> for crate::peer::executor::ExecutorId {
-    type Error = ConversionError;
-
-    fn try_from(value: ExecutorId) -> Result<Self, Self::Error> {
-        type ErrorBuilder = ConversionErrorBuilder<ExecutorId, crate::peer::executor::ExecutorId>;
-
+    },
+    Model <- Proto: |value: Proto| {
         value.uuid
-            .ok_or(ErrorBuilder::field_not_set("uuid"))
-            .map(|uuid| Self { uuid: uuid.into() })
-    }
+            .ok_or(Error::field_not_set("uuid"))
+            .map(|uuid| Model { uuid: uuid.into() })
+    },
 }
+
+// impl From<crate::peer::executor::ExecutorId> for ExecutorId {
+//     fn from(value: crate::peer::executor::ExecutorId) -> Self {
+//         Self {
+//             uuid: Some(value.uuid.into())
+//         }
+//     }
+// }
+//
+// impl TryFrom<ExecutorId> for crate::peer::executor::ExecutorId {
+//     type Error = ConversionError;
+//
+//     fn try_from(value: ExecutorId) -> Result<Self, Self::Error> {
+//         type ErrorBuilder = ConversionErrorBuilder<ExecutorId, crate::peer::executor::ExecutorId>;
+//
+//         value.uuid
+//             .ok_or(ErrorBuilder::field_not_set("uuid"))
+//             .map(|uuid| Self { uuid: uuid.into() })
+//     }
+// }
 
 impl From<crate::peer::executor::container::Engine> for Engine {
     fn from(value: crate::peer::executor::container::Engine) -> Self {
