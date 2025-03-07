@@ -1,4 +1,4 @@
-use crate::proto::{ConversionError, ConversionErrorBuilder};
+use crate::proto::{conversion, ConversionError, ConversionErrorBuilder, ConversionResult};
 
 include!(concat!(env!("OUT_DIR"), "/opendut.types.peer.executor.rs"));
 
@@ -161,23 +161,19 @@ impl TryFrom<ExecutorDescriptor> for crate::peer::executor::ExecutorDescriptor {
     }
 }
 
-impl From<crate::peer::executor::ExecutorId> for ExecutorId {
-    fn from(value: crate::peer::executor::ExecutorId) -> Self {
-        Self {
+conversion! {
+    type Model = crate::peer::executor::ExecutorId;
+    type Proto = ExecutorId;
+
+    fn from(value: Model) -> Proto {
+        Proto {
             uuid: Some(value.uuid.into())
         }
     }
-}
 
-impl TryFrom<ExecutorId> for crate::peer::executor::ExecutorId {
-    type Error = ConversionError;
-
-    fn try_from(value: ExecutorId) -> Result<Self, Self::Error> {
-        type ErrorBuilder = ConversionErrorBuilder<ExecutorId, crate::peer::executor::ExecutorId>;
-
-        value.uuid
-            .ok_or(ErrorBuilder::field_not_set("uuid"))
-            .map(|uuid| Self { uuid: uuid.into() })
+    fn try_from(value: Proto) -> ConversionResult<Model> {
+        extract!(value.uuid)
+            .map(|uuid| Model { uuid: uuid.into() })
     }
 }
 
