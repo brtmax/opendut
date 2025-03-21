@@ -40,11 +40,11 @@ impl<'transaction> Resources<'transaction> {
     }
 }
 impl ResourcesStorageApi for Resources<'_> {
-    fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
+    async fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
     where R: Resource + Persistable + Subscribable {
         match &mut self.kind {
             ResourcesKind::Persistent(transaction) => {
-                let result = transaction.insert(id.clone(), resource.clone());
+                let result = transaction.insert(id.clone(), resource.clone()).await;
                 if result.is_ok() {
                     transaction.relayed_subscription_events
                         .notify(SubscriptionEvent::Inserted { id, value: resource })
@@ -53,7 +53,7 @@ impl ResourcesStorageApi for Resources<'_> {
                 result
             }
             ResourcesKind::Volatile(transaction) => {
-                let result = transaction.insert(id.clone(), resource.clone());
+                let result = transaction.insert(id.clone(), resource.clone()).await;
                 if result.is_ok() {
                     transaction.relayed_subscription_events
                         .notify(SubscriptionEvent::Inserted { id, value: resource })
@@ -64,27 +64,27 @@ impl ResourcesStorageApi for Resources<'_> {
         }
     }
 
-    fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
+    async fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Persistable {
         match &mut self.kind {
-            ResourcesKind::Persistent(transaction) => transaction.remove(id),
-            ResourcesKind::Volatile(transaction) => transaction.remove(id),
+            ResourcesKind::Persistent(transaction) => transaction.remove(id).await,
+            ResourcesKind::Volatile(transaction) => transaction.remove(id).await,
         }
     }
 
-    fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
+    async fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Persistable + Clone {
         match &self.kind {
-            ResourcesKind::Persistent(transaction) => transaction.get(id),
-            ResourcesKind::Volatile(transaction) => transaction.get(id),
+            ResourcesKind::Persistent(transaction) => transaction.get(id).await,
+            ResourcesKind::Volatile(transaction) => transaction.get(id).await,
         }
     }
 
-    fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
+    async fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
     where R: Resource + Persistable + Clone {
         match &self.kind {
-            ResourcesKind::Persistent(transaction) => transaction.list(),
-            ResourcesKind::Volatile(transaction) => transaction.list(),
+            ResourcesKind::Persistent(transaction) => transaction.list().await,
+            ResourcesKind::Volatile(transaction) => transaction.list().await,
         }
     }
 }

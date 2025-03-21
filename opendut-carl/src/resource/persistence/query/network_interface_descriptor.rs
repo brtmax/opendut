@@ -1,4 +1,5 @@
-use diesel::{Connection, ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl, SelectableHelper};
+use diesel::{ExpressionMethods, QueryDsl, SelectableHelper};
+use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
 use uuid::Uuid;
 
 use opendut_types::peer::PeerId;
@@ -34,7 +35,7 @@ pub(crate) struct PersistableNetworkInterfaceKindCan {
     pub data_sample_point_times_1000: i32,
 }
 
-pub fn insert(interface: NetworkInterfaceDescriptor, peer_id: PeerId, connection: &mut PgConnection) -> PersistenceResult<()> {
+pub async fn insert(interface: NetworkInterfaceDescriptor, peer_id: PeerId, connection: &mut AsyncPgConnection) -> PersistenceResult<()> {
     let network_interface_id = interface.id.uuid;
 
     let (kind, network_interface_kind_can) = match &interface.configuration {
@@ -69,48 +70,48 @@ pub fn insert(interface: NetworkInterfaceDescriptor, peer_id: PeerId, connection
         peer_id: peer_id.uuid,
     };
 
-    insert_persistable(network_interface_descriptor, network_interface_kind_can, interface.id, connection)
+    insert_persistable(network_interface_descriptor, network_interface_kind_can, interface.id, connection).await
 }
 
 
-fn insert_persistable(
+async fn insert_persistable(
     network_interface_descriptor: PersistableNetworkInterfaceDescriptor,
     maybe_network_interface_kind_can: Option<PersistableNetworkInterfaceKindCan>,
     network_interface_id: NetworkInterfaceId,
-    connection: &mut PgConnection
+    connection: &mut AsyncPgConnection
 ) -> PersistenceResult<()> {
 
-    connection.transaction::<_, PersistenceError, _>(|connection| {
+    connection.transaction::<_, PersistenceError, _>(|connection| Box::pin(async {
 
         diesel::insert_into(schema::network_interface_descriptor::table)
             .values(&network_interface_descriptor)
             .on_conflict(schema::network_interface_descriptor::network_interface_id)
             .do_update()
             .set(&network_interface_descriptor)
-            .execute(connection)
+            .execute(connection).await
             .map_err(|cause| PersistenceError::insert::<NetworkInterfaceDescriptor>(network_interface_id.uuid, cause))?;
 
-        maybe_network_interface_kind_can.map(|network_interface_kind_can| {
+        if let Some(network_interface_kind_can) = maybe_network_interface_kind_can {
             diesel::insert_into(schema::network_interface_kind_can::table)
                 .values(&network_interface_kind_can)
                 .on_conflict(schema::network_interface_kind_can::network_interface_id)
                 .do_update()
                 .set(&network_interface_kind_can)
-                .execute(connection)
-                .map_err(|cause| PersistenceError::insert::<PersistableNetworkInterfaceKindCan>(network_interface_id.uuid, cause))
-        }).transpose()?;
+                .execute(connection).await
+                .map_err(|cause| PersistenceError::insert::<PersistableNetworkInterfaceKindCan>(network_interface_id.uuid, cause))?;
+        }
 
         Ok(())
-    })?;
+    })).await?;
 
     Ok(())
 }
 
-pub fn list_filtered_by_peer(
+pub async fn list_filtered_by_peer(
     filter_by_peer_id: Filter<PeerId>,
-    connection: &mut PgConnection
+    connection: &mut AsyncPgConnection
 ) -> PersistenceResult<Vec<NetworkInterfaceDescriptor>> {
-    let persistables = list_filtered_by_peer_id_persistable(filter_by_peer_id, connection)?;
+    let persistables = list_filtered_by_peer_id_persistable(filter_by_peer_id, connection).await?;
 
     let result = persistables.into_iter().map(|(persistable_network_interface_descriptor, persistable_network_interface_kind_can)| {
         let PersistableNetworkInterfaceDescriptor { network_interface_id, name, kind, peer_id: _ } = persistable_network_interface_descriptor;
@@ -127,9 +128,9 @@ pub fn list_filtered_by_peer(
     Ok(result)
 }
 
-fn list_filtered_by_peer_id_persistable(
+async fn list_filtered_by_peer_id_persistable(
     filter_by_peer_id: Filter<PeerId>,
-    connection: &mut PgConnection
+    connection: &mut AsyncPgConnection
 ) -> PersistenceResult<Vec<(
     PersistableNetworkInterfaceDescriptor,
     Option<PersistableNetworkInterfaceKindCan>
@@ -143,7 +144,7 @@ fn list_filtered_by_peer_id_persistable(
 
     query
         .select((PersistableNetworkInterfaceDescriptor::as_select(), Option::<PersistableNetworkInterfaceKindCan>::as_select()))
-        .get_results(connection)
+        .get_results(connection).await
         .map_err(PersistenceError::list::<NetworkInterfaceDescriptor>)
 }
 
@@ -188,12 +189,12 @@ fn network_interface_configuration_from_persistable(
     Ok(result)
 }
 
-pub fn remove(network_interface_id: NetworkInterfaceId, connection: &mut PgConnection) -> PersistenceResult<()> {
+pub async fn remove(network_interface_id: NetworkInterfaceId, connection: &mut AsyncPgConnection) -> PersistenceResult<()> {
     diesel::delete(
         schema::network_interface_descriptor::table
             .filter(schema::network_interface_descriptor::network_interface_id.eq(network_interface_id.uuid))
     )
-    .execute(connection)
+    .execute(connection).await
     .map_err(|cause| PersistenceError::remove::<PersistableNetworkInterfaceDescriptor>(network_interface_id, cause))?;
 
     Ok(())

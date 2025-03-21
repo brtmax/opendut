@@ -8,11 +8,11 @@ use crate::resource::storage::ResourcesStorageApi;
 
 impl Resources<'_> {
     #[tracing::instrument(skip_all, level="trace")]
-    pub fn list_devices(&self) -> Result<Vec<DeviceDescriptor>, ListDevicesError> {
+    pub async fn list_devices(&self) -> Result<Vec<DeviceDescriptor>, ListDevicesError> {
 
         debug!("Querying all devices.");
 
-        let peers = self.list::<PeerDescriptor>()
+        let peers = self.list::<PeerDescriptor>().await
             .map_err(|cause| ListDevicesError::Internal { cause: cause.to_string() })?;
 
         let devices = peers.into_iter()
@@ -34,8 +34,6 @@ mod tests {
     use crate::resource::manager::ResourceManager;
     use crate::settings::vpn::Vpn;
     use googletest::prelude::*;
-    use std::sync::Arc;
-    use crate::manager::peer_manager;
     use crate::manager::peer_manager::StorePeerDescriptorParams;
 
     #[tokio::test]
@@ -50,11 +48,12 @@ mod tests {
         assert!(result.is_empty());
 
 
-        peer_manager::store_peer_descriptor(StorePeerDescriptorParams {
-            resource_manager: Arc::clone(&resource_manager),
-            vpn: Vpn::Disabled,
-            peer_descriptor: peer.descriptor,
-        }).await?;
+        resource_manager.resources_mut(async |resources|
+            resources.store_peer_descriptor(StorePeerDescriptorParams {
+                vpn: Vpn::Disabled,
+                peer_descriptor: peer.descriptor,
+            }).await
+        ).await??;
 
 
         let result = resource_manager.resources(async |resources|

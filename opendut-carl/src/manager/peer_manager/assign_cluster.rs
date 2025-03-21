@@ -43,15 +43,15 @@ impl Resources<'_> {
             let old_peer_configuration = OldPeerConfiguration {
                 cluster_assignment: Some(cluster_assignment),
             };
-            self.insert(peer_id, Clone::clone(&old_peer_configuration))
+            self.insert(peer_id, Clone::clone(&old_peer_configuration)).await
                 .map_err(|source| AssignClusterError::Persistence { peer_id, source })?;
 
             let peer_configuration = {
-                let peer_descriptor = self.get::<PeerDescriptor>(peer_id)
+                let peer_descriptor = self.get::<PeerDescriptor>(peer_id).await
                     .map_err(|source| AssignClusterError::Persistence { peer_id, source })?
                     .ok_or(AssignClusterError::PeerNotFound(peer_id))?;
 
-                let mut peer_configuration = self.get::<PeerConfiguration>(peer_id)
+                let mut peer_configuration = self.get::<PeerConfiguration>(peer_id).await
                     .map_err(|source| AssignClusterError::Persistence { peer_id, source })?
                     .unwrap_or_default();
 
@@ -75,7 +75,7 @@ impl Resources<'_> {
 
                 peer_configuration
             };
-            self.insert(peer_id, Clone::clone(&peer_configuration))
+            self.insert(peer_id, Clone::clone(&peer_configuration)).await
                 .map_err(|source| AssignClusterError::Persistence { peer_id, source })?;
 
             (old_peer_configuration, peer_configuration)

@@ -24,7 +24,7 @@ pub async fn list_cluster_peer_states(params: ListClusterPeerStatesParams) -> Re
         .collect::<HashSet<_>>();
     let all_peer_states =
         resource_manager.resources(async |resources|
-            resources.list_peer_states()
+            resources.list_peer_states().await
         ).await
             .map_err(|error| ListClusterPeerStatesError::ListPeerStates { cluster_id, source: error })?;
 

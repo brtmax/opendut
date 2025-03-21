@@ -1,6 +1,7 @@
-use diesel::{ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl, SelectableHelper};
+use diesel::{ExpressionMethods, QueryDsl, SelectableHelper};
 use std::collections::HashMap;
 use std::ops::Not;
+use diesel_async::AsyncPgConnection;
 use uuid::Uuid;
 
 use crate::resource::persistence::database::schema;
@@ -12,7 +13,7 @@ use opendut_types::peer::{PeerDescriptor, PeerId, PeerLocation, PeerName, PeerNe
 use opendut_types::topology::Topology;
 use opendut_types::util::net::NetworkInterfaceName;
 
-pub fn insert(peer_descriptor: PeerDescriptor, connection: &mut PgConnection) -> PersistenceResult<()> {
+pub fn insert(peer_descriptor: PeerDescriptor, connection: &mut AsyncPgConnection) -> PersistenceResult<()> {
     let PeerDescriptor { id: peer_id, name, location, network, topology, executors } = peer_descriptor;
     let PeerNetworkDescriptor { interfaces, bridge_name } = network;
 
@@ -83,7 +84,7 @@ pub struct PersistablePeerDescriptor {
     pub location: Option<String>,
     pub network_bridge_name: Option<String>,
 }
-fn insert_persistable(persistable: PersistablePeerDescriptor, connection: &mut PgConnection) -> PersistenceResult<()> {
+fn insert_persistable(persistable: PersistablePeerDescriptor, connection: &mut AsyncPgConnection) -> PersistenceResult<()> {
     diesel::insert_into(schema::peer_descriptor::table)
         .values(&persistable)
         .on_conflict(schema::peer_descriptor::peer_id)
@@ -94,7 +95,7 @@ fn insert_persistable(persistable: PersistablePeerDescriptor, connection: &mut P
     Ok(())
 }
 
-pub fn remove(peer_id: PeerId, connection: &mut PgConnection) -> PersistenceResult<Option<PeerDescriptor>> {
+pub fn remove(peer_id: PeerId, connection: &mut AsyncPgConnection) -> PersistenceResult<Option<PeerDescriptor>> {
     let result = list(Filter::By(peer_id), connection)?.values().next().cloned();
 
     diesel::delete(
@@ -107,7 +108,7 @@ pub fn remove(peer_id: PeerId, connection: &mut PgConnection) -> PersistenceResu
     Ok(result)
 }
 
-pub fn list(filter_by_peer_id: Filter<PeerId>, connection: &mut PgConnection) -> PersistenceResult<HashMap<PeerId, PeerDescriptor>> {
+pub fn list(filter_by_peer_id: Filter<PeerId>, connection: &mut AsyncPgConnection) -> PersistenceResult<HashMap<PeerId, PeerDescriptor>> {
     let mut query = schema::peer_descriptor::table.into_boxed();
 
     if let Filter::By(peer_id) = filter_by_peer_id {

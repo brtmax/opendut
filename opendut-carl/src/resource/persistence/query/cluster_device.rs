@@ -1,6 +1,7 @@
 use crate::resource::persistence::database::schema;
 use crate::resource::persistence::error::{PersistenceError, PersistenceResult};
-use diesel::{ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl, SelectableHelper};
+use diesel::{ExpressionMethods, QueryDsl, SelectableHelper};
+use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use opendut_types::cluster::ClusterId;
 use uuid::Uuid;
 
@@ -13,32 +14,32 @@ pub struct PersistableClusterDevice {
     pub cluster_id: Uuid,
     pub device_id: Uuid,
 }
-pub fn insert(persistable: PersistableClusterDevice, connection: &mut PgConnection) -> PersistenceResult<()> {
+pub async fn insert(persistable: PersistableClusterDevice, connection: &mut AsyncPgConnection) -> PersistenceResult<()> {
     diesel::insert_into(schema::cluster_device::table)
         .values(&persistable)
         .on_conflict((schema::cluster_device::cluster_id, schema::cluster_device::device_id))
         .do_update()
         .set(&persistable)
-        .execute(connection)
+        .execute(connection).await
         .map_err(|cause| PersistenceError::insert::<PersistableClusterDevice>(persistable.device_id, cause))?;
     Ok(())
 }
 
-pub fn list_filtered_by_cluster_id(cluster_id: ClusterId, connection: &mut PgConnection) -> PersistenceResult<Vec<PersistableClusterDevice>> {
+pub async fn list_filtered_by_cluster_id(cluster_id: ClusterId, connection: &mut AsyncPgConnection) -> PersistenceResult<Vec<PersistableClusterDevice>> {
     schema::cluster_device::table
         .filter(schema::cluster_device::cluster_id.eq(cluster_id.0))
         .select(PersistableClusterDevice::as_select())
-        .get_results(connection)
+        .get_results(connection).await
         .map_err(PersistenceError::list::<PersistableClusterDevice>)
 }
 
-pub fn remove(cluster_device: PersistableClusterDevice, connection: &mut PgConnection) -> PersistenceResult<()> {
+pub async fn remove(cluster_device: PersistableClusterDevice, connection: &mut AsyncPgConnection) -> PersistenceResult<()> {
     diesel::delete(
         schema::cluster_device::table
             .filter(schema::cluster_device::device_id.eq(cluster_device.device_id))
             .filter(schema::cluster_device::cluster_id.eq(cluster_device.cluster_id))
     )
-    .execute(connection)
+    .execute(connection).await
     .map_err(|cause| PersistenceError::remove::<PersistableClusterDevice>(cluster_device, cause))?;
 
     Ok(())

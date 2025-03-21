@@ -1,7 +1,6 @@
 use std::sync::{Mutex, MutexGuard};
-
+use diesel_async::AsyncPgConnection;
 use crate::resource::storage::volatile::VolatileResourcesStorage;
-use diesel::PgConnection;
 
 pub mod database;
 pub(crate) mod resources;
@@ -12,13 +11,13 @@ pub struct Storage<'a> {
     pub memory: &'a mut Memory,
 }
 pub struct Db<'a> {
-    pub inner: Mutex<&'a mut PgConnection>, //Mutex rather than RwLock, because we share this between threads (i.e. we need it to implement `Sync`)
+    pub inner: Mutex<&'a mut AsyncPgConnection>, //Mutex rather than RwLock, because we share this between threads (i.e. we need it to implement `Sync`) //TODO still true?
 }
 impl<'a> Db<'a> {
-    pub fn from_connection(connection: &'a mut PgConnection) -> Db<'a> {
+    pub fn from_connection(connection: &'a mut AsyncPgConnection) -> Db<'a> {
         Self { inner: Mutex::new(connection) }
     }
-    pub fn connection(&self) -> MutexGuard<&'a mut PgConnection> {
+    pub fn connection(&self) -> MutexGuard<&'a mut AsyncPgConnection> {
         self.inner.lock().expect("error while locking mutex for database connection")
     }
 }

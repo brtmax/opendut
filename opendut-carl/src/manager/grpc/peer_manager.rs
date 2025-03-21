@@ -63,28 +63,37 @@ impl PeerManagerService for PeerManagerFacade {
 
         trace!("Received request to store peer descriptor: {peer_descriptor:?}");
 
-        let result = peer_manager::store_peer_descriptor(StorePeerDescriptorParams {
-            resource_manager: Arc::clone(&self.resource_manager),
-            vpn: Clone::clone(&self.vpn),
-            peer_descriptor: Clone::clone(&peer_descriptor),
-        }).await;
+        let result = self.resource_manager.resources_mut(async |resources|
+            resources.store_peer_descriptor(StorePeerDescriptorParams {
+                vpn: Clone::clone(&self.vpn),
+                peer_descriptor: Clone::clone(&peer_descriptor),
+            }).await
+        ).await;
 
-        match result {
+        let response = match result {
+            Ok(Ok(peer_id)) => store_peer_descriptor_response::Reply::Success(
+                StorePeerDescriptorSuccess {
+                    peer_id: Some(peer_id.into())
+                }
+            ),
+            Ok(Err(error)) => store_peer_descriptor_response::Reply::Failure(error.into()),
             Err(error) => {
-                Ok(Response::new(StorePeerDescriptorResponse {
-                    reply: Some(store_peer_descriptor_response::Reply::Failure(error.into()))
-                }))
+                let cause = String::from("Error when handling transaction in database");
+                error!("{cause}: {error}");
+
+                store_peer_descriptor_response::Reply::Failure(
+                    opendut_carl_api::carl::peer::StorePeerDescriptorError::Internal {
+                        peer_id: peer_descriptor.id,
+                        peer_name: peer_descriptor.name,
+                        cause,
+                    }.into()
+                )
             }
-            Ok(peer_id) => {
-                Ok(Response::new(StorePeerDescriptorResponse {
-                    reply: Some(store_peer_descriptor_response::Reply::Success(
-                        StorePeerDescriptorSuccess {
-                            peer_id: Some(peer_id.into())
-                        }
-                    ))
-                }))
-            }
-        }
+        };
+
+        Ok(Response::new(StorePeerDescriptorResponse {
+            reply: Some(response)
+        }))
     }
 
     #[tracing::instrument(skip_all, level="trace")]
@@ -237,7 +246,7 @@ impl PeerManagerService for PeerManagerFacade {
 
         let result =
             self.resource_manager.resources(async |resources|
-                resources.list_peer_states()
+                resources.list_peer_states().await
             ).await
                 .map_err(|error| ListPeerStatesError::Internal { cause: error.to_string() });
 
@@ -270,7 +279,7 @@ impl PeerManagerService for PeerManagerFacade {
         trace!("Received request to list devices.");
 
         let devices = self.resource_manager.resources(async |resources|
-            resources.list_devices()
+            resources.list_devices().await
         ).await
             .expect("Devices should be listable");
 

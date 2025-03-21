@@ -28,7 +28,7 @@ impl VolatileResourcesStorageHandle {
             memory: memory.deref_mut(),
             relayed_subscription_events: &mut relayed_subscription_events,
         };
-        let result = futures::executor::block_on(code(transaction));
+        let result = tokio::runtime::Handle::current().block_on(code(transaction));
 
         debug_assert!(relayed_subscription_events.is_empty(), "Read-only storage operations should not trigger any subscription events.");
 
@@ -47,7 +47,7 @@ impl VolatileResourcesStorageHandle {
             memory: memory.deref_mut(),
             relayed_subscription_events: &mut relayed_subscription_events,
         };
-        let result = futures::executor::block_on(code(transaction));
+        let result = tokio::runtime::Handle::current().block_on(code(transaction));
         Ok((result, relayed_subscription_events))
     }
 }
@@ -59,7 +59,7 @@ pub struct VolatileResourcesStorage {
 
 impl ResourcesStorageApi for VolatileResourcesStorage {
 
-    fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
+    async fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
     where R: Resource {
         let id = id.into_id();
         let column = self.storage
@@ -69,7 +69,7 @@ impl ResourcesStorageApi for VolatileResourcesStorage {
         Ok(())
     }
 
-    fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
+    async fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource {
         let id = id.into_id();
         let type_id = TypeId::of::<R>();
@@ -90,7 +90,7 @@ impl ResourcesStorageApi for VolatileResourcesStorage {
         }
     }
 
-    fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
+    async fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Clone {
         let id = id.into_id();
         let result = self.column_of::<R>()
@@ -99,7 +99,7 @@ impl ResourcesStorageApi for VolatileResourcesStorage {
         Ok(result)
     }
 
-    fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
+    async fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
     where R: Resource {
         let result: HashMap<R::Id, R> = match self.column_of::<R>() {
             Some(column) => {
@@ -153,23 +153,23 @@ pub struct VolatileResourcesTransaction<'transaction> {
     pub relayed_subscription_events: &'transaction mut RelayedSubscriptionEvents,
 }
 impl ResourcesStorageApi for VolatileResourcesTransaction<'_> {
-    fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
+    async fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
     where R: Resource + Persistable + Subscribable {
-        self.memory.insert(id, resource)
+        self.memory.insert(id, resource).await
     }
 
-    fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
+    async fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Persistable {
-        self.memory.remove(id)
+        self.memory.remove(id).await
     }
 
-    fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
+    async fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Persistable + Clone {
-        self.memory.get(id)
+        self.memory.get(id).await
     }
 
-    fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
+    async fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
     where R: Resource + Persistable + Clone {
-        self.memory.list()
+        self.memory.list().await
     }
 }

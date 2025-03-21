@@ -1,27 +1,25 @@
-use crate::resource::manager::ResourceManagerRef;
+use crate::resource::api::resources::Resources;
 use crate::resource::persistence::error::PersistenceError;
+use crate::resource::storage::ResourcesStorageApi;
 use crate::settings::vpn::Vpn;
 use opendut_carl_api::carl::peer::StorePeerDescriptorError;
 use opendut_types::peer::{PeerDescriptor, PeerId};
 use tracing::{debug, error, info, warn};
 
 pub struct StorePeerDescriptorParams {
-    pub resource_manager: ResourceManagerRef,
     pub vpn: Vpn,
     pub peer_descriptor: PeerDescriptor,
 }
 
-#[tracing::instrument(skip(params), level="trace")]
-pub async fn store_peer_descriptor(params: StorePeerDescriptorParams) -> Result<PeerId, StorePeerDescriptorError> {
-
-    async fn inner(params: StorePeerDescriptorParams) -> Result<PeerId, StorePeerDescriptorError> {
+impl Resources<'_> {
+    #[tracing::instrument(skip_all, level="trace")]
+    pub async fn store_peer_descriptor(&mut self, params: StorePeerDescriptorParams) -> Result<PeerId, StorePeerDescriptorError> {
 
         let peer_id = params.peer_descriptor.id;
         let peer_name = Clone::clone(&params.peer_descriptor.name);
         let peer_descriptor = params.peer_descriptor;
-        let resource_manager = params.resource_manager;
 
-        let is_new_peer = resource_manager.get::<PeerDescriptor>(peer_id).await
+        let is_new_peer = self.get::<PeerDescriptor>(peer_id).await
             .map_err(|cause| StorePeerDescriptorError::Internal { peer_id, peer_name: peer_name.clone(), cause: cause.to_string() })?
             .is_none();
 
@@ -36,7 +34,7 @@ pub async fn store_peer_descriptor(params: StorePeerDescriptorParams) -> Result<
             }
         }
 
-        let persistence_result = resource_manager.insert(peer_id, peer_descriptor).await
+        let persistence_result = self.insert(peer_id, peer_descriptor).await
             .map(|()| peer_id)
             .map_err(|cause: PersistenceError| StorePeerDescriptorError::Internal { peer_id, peer_name: peer_name.clone(), cause: cause.to_string() });
 
@@ -59,22 +57,18 @@ pub async fn store_peer_descriptor(params: StorePeerDescriptorParams) -> Result<
 
         persistence_result
     }
-
-    inner(params).await
-        .inspect_err(|err| error!("{err}"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::manager::testing::PeerFixture;
-    use crate::resource::manager::ResourceManager;
+    use crate::resource::manager::{ResourceManager, ResourceManagerRef};
     use googletest::prelude::*;
     use opendut_types::peer::PeerNetworkDescriptor;
     use opendut_types::topology::DeviceDescriptor;
     use opendut_types::topology::{DeviceDescription, DeviceId, DeviceName, Topology};
     use opendut_types::util::net::{NetworkInterfaceConfiguration, NetworkInterfaceDescriptor, NetworkInterfaceId, NetworkInterfaceName};
-    use std::sync::Arc;
 
     #[tokio::test]
     async fn should_update_expected_resources_in_memory() -> anyhow::Result<()> {
@@ -92,11 +86,12 @@ mod tests {
     async fn should_update_expected_resources_implementation(resource_manager: ResourceManagerRef) -> anyhow::Result<()> {
         let peer = PeerFixture::new();
 
-        store_peer_descriptor(StorePeerDescriptorParams {
-            resource_manager: Arc::clone(&resource_manager),
-            vpn: Vpn::Disabled,
-            peer_descriptor: Clone::clone(&peer.descriptor),
-        }).await?;
+        resource_manager.resources_mut(async |resources|
+            resources.store_peer_descriptor(StorePeerDescriptorParams {
+                vpn: Vpn::Disabled,
+                peer_descriptor: Clone::clone(&peer.descriptor),
+            }).await
+        ).await??;
 
         assert_that!(resource_manager.get::<PeerDescriptor>(peer.id).await?.as_ref(), some(eq(&peer.descriptor)));
         // TODO: what about PeerState?
@@ -132,11 +127,12 @@ mod tests {
             ..Clone::clone(&peer.descriptor)
         };
 
-        store_peer_descriptor(StorePeerDescriptorParams {
-            resource_manager: Arc::clone(&resource_manager),
-            vpn: Vpn::Disabled,
-            peer_descriptor: Clone::clone(&changed_descriptor),
-        }).await?;
+        resource_manager.resources_mut(async |resources|
+            resources.store_peer_descriptor(StorePeerDescriptorParams {
+                vpn: Vpn::Disabled,
+                peer_descriptor: Clone::clone(&changed_descriptor),
+            }).await
+        ).await??;
 
         assert_that!(resource_manager.get::<PeerDescriptor>(peer.id).await?.as_ref(), some(eq(&changed_descriptor)));
         // TODO: what about PeerState?

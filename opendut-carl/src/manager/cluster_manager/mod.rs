@@ -118,12 +118,12 @@ impl ClusterManager {
         match cluster_deployable {
             ClusterDeployable::AllPeersAvailable => {
                 self.resource_manager.resources_mut(async |resources| {
-                    let cluster_name = resources.get::<ClusterConfiguration>(cluster_id)
+                    let cluster_name = resources.get::<ClusterConfiguration>(cluster_id).await
                         .map_err(|cause| StoreClusterDeploymentError::Internal { cluster_id, cluster_name: None, cause: cause.to_string() })?
                         .map(|cluster| cluster.name)
                         .unwrap_or_else(|| ClusterName::try_from("unknown_cluster").unwrap());
 
-                    resources.insert(cluster_id, deployment)
+                    resources.insert(cluster_id, deployment).await
                         .map_err(|cause| StoreClusterDeploymentError::Internal { cluster_id, cluster_name: Some(cluster_name.clone()), cause: cause.to_string() })
                 }).await
                     .map_err(|cause| StoreClusterDeploymentError::Internal { cluster_id, cluster_name: None, cause: cause.to_string() })??;
@@ -182,7 +182,7 @@ impl ClusterManager {
 
         let clusters_containing_devices_of_upped_peer = self.resource_manager.resources_mut(async |resources| {
 
-            let peer_descriptor = resources.get::<PeerDescriptor>(peer_id)?
+            let peer_descriptor = resources.get::<PeerDescriptor>(peer_id).await?
                 .context(format!("No peer descriptor found for newly available peer <{peer_id}>."))?;
 
             let peer_devices = peer_descriptor.topology.devices
@@ -190,18 +190,20 @@ impl ClusterManager {
                 .map(|device| device.id)
                 .collect::<Vec<_>>();
 
-            let cluster_configurations = resources.list::<ClusterConfiguration>()?;
+            let cluster_configurations = resources.list::<ClusterConfiguration>().await?;
 
-            let clusters_containing_devices_of_upped_peer = cluster_configurations.into_iter()
-                .filter(|(_, cluster_configuration)|
-                    cluster_configuration.devices.iter()
-                        .any(|device| peer_devices.contains(device))
-                )
-                .filter_map(|(cluster_id, _)| { //filter out clusters without stored deployment
-                    resources.get::<ClusterDeployment>(cluster_id)
-                        .transpose()
-                })
-                .collect::<Result<Vec<_>, _>>()?;
+            let cluster_deployments = resources.list::<ClusterDeployment>().await?;
+            let cluster_deployments = cluster_deployments.keys().collect::<HashSet<_>>();
+
+            let clusters_containing_devices_of_upped_peer =
+                cluster_configurations.into_iter()
+                    .filter(|(_, cluster_configuration)|
+                        cluster_configuration.devices.iter()
+                            .any(|device| peer_devices.contains(device))
+                    )
+                    .filter(|(cluster_id, _)| cluster_deployments.contains(&cluster_id))
+                    .map(|(cluster_id, _)| cluster_id)
+                    .collect::<Vec<_>>();
 
             anyhow::Ok(clusters_containing_devices_of_upped_peer)
         }).await??;
@@ -210,8 +212,8 @@ impl ClusterManager {
         if clusters_containing_devices_of_upped_peer.is_empty() {
             trace!("Devices of newly available peer <{peer_id}> are not used in any clusters. Not deploying any clusters.");
         } else {
-            for cluster in clusters_containing_devices_of_upped_peer {
-                self.deploy_cluster_if_all_peers_available(cluster.id).await?;
+            for cluster_id in clusters_containing_devices_of_upped_peer {
+                self.deploy_cluster_if_all_peers_available(cluster_id).await?;
             }
         }
         Ok(())
@@ -500,7 +502,6 @@ mod test {
         use opendut_carl_api::carl::broker::stream_header;
         use opendut_carl_api::proto::services::peer_messaging_broker::ApplyPeerConfiguration;
         use opendut_types::peer::configuration::{OldPeerConfiguration, PeerConfiguration};
-        use crate::manager::peer_manager;
 
         #[rstest]
         #[tokio::test]
@@ -519,28 +520,29 @@ mod test {
                 devices: HashSet::from([peer_a.device, peer_b.device]),
             };
 
-            peer_manager::store_peer_descriptor(StorePeerDescriptorParams {
-                resource_manager: Arc::clone(&fixture.resource_manager),
-                vpn: Vpn::Disabled,
-                peer_descriptor: Clone::clone(&peer_a.descriptor),
-            }).await?;
+            let (mut peer_a_rx, mut peer_b_rx) =
+                fixture.resource_manager.resources_mut::<_, _, anyhow::Error>(async |resources| {
+                    resources.store_peer_descriptor(StorePeerDescriptorParams {
+                        vpn: Vpn::Disabled,
+                        peer_descriptor: Clone::clone(&peer_a.descriptor),
+                    }).await?;
 
-            peer_manager::store_peer_descriptor(StorePeerDescriptorParams {
-                resource_manager: Arc::clone(&fixture.resource_manager),
-                vpn: Vpn::Disabled,
-                peer_descriptor: Clone::clone(&peer_b.descriptor),
-            }).await?;
-
-
-            let mut peer_a_rx = peer_open(peer_a.id, peer_a.remote_host, Arc::clone(&fixture.peer_messaging_broker)).await?;
-            let mut peer_b_rx = peer_open(peer_b.id, peer_b.remote_host, Arc::clone(&fixture.peer_messaging_broker)).await?;
+                    resources.store_peer_descriptor(StorePeerDescriptorParams {
+                        vpn: Vpn::Disabled,
+                        peer_descriptor: Clone::clone(&peer_b.descriptor),
+                    }).await?;
 
 
-            fixture.resource_manager.resources_mut(async |resources| {
-                resources.create_cluster_configuration(CreateClusterConfigurationParams {
-                    cluster_configuration,
-                })
-            }).await??;
+                    let peer_a_rx = peer_open(peer_a.id, peer_a.remote_host, Arc::clone(&fixture.peer_messaging_broker)).await?;
+                    let peer_b_rx = peer_open(peer_b.id, peer_b.remote_host, Arc::clone(&fixture.peer_messaging_broker)).await?;
+
+
+                    resources.create_cluster_configuration(CreateClusterConfigurationParams {
+                        cluster_configuration,
+                    }).await?;
+
+                    Ok((peer_a_rx, peer_b_rx))
+                }).await??;
 
             assert_that!(fixture.testee.lock().await.deploy_cluster(cluster_id).await, ok(eq(&())));
 

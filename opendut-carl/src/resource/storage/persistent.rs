@@ -5,22 +5,23 @@ use crate::resource::persistence::resources::Persistable;
 use crate::resource::persistence::{Db, Storage};
 use crate::resource::storage::volatile::VolatileResourcesStorage;
 use crate::resource::storage::{DatabaseConnectInfo, Resource, ResourcesStorageApi};
-use diesel::{Connection, PgConnection};
+use diesel_async::{AsyncConnection, AsyncPgConnection};
 use std::any::Any;
 use std::collections::HashMap;
 use std::ops::DerefMut;
 use std::sync::Mutex;
+use diesel_async::pooled_connection::bb8::Pool;
 
 pub struct PersistentResourcesStorage {
-    db_connection: Mutex<PgConnection>,
+    db_connection: Pool<AsyncPgConnection>,
     memory: Mutex<VolatileResourcesStorage>,
 }
 impl PersistentResourcesStorage {
     pub async fn connect(database_connect_info: &DatabaseConnectInfo) -> Result<Self, ConnectError> {
         let db_connection = crate::resource::persistence::database::connect(database_connect_info).await?;
-        let db_connection = Mutex::new(db_connection);
         let memory = VolatileResourcesStorage::default();
         let memory = Mutex::new(memory);
+        //TODO use pool
         Ok(Self { db_connection, memory })
     }
 
@@ -39,7 +40,7 @@ impl PersistentResourcesStorage {
             relayed_subscription_events: &mut relayed_subscription_events,
         };
 
-        let result = futures::executor::block_on(code(transaction));
+        let result = tokio::runtime::Handle::current().block_on(code(transaction));
 
         debug_assert!(relayed_subscription_events.is_empty(), "Read-only storage operations should not trigger any subscription events.");
 
@@ -48,25 +49,32 @@ impl PersistentResourcesStorage {
 
     pub async fn resources_mut<T, E, F>(&mut self, code: F) -> PersistenceResult<(Result<T, E>, RelayedSubscriptionEvents)>
     where
-        F: AsyncFnOnce(PersistentResourcesTransaction) -> Result<T, E>,
+        F: AsyncFnOnce(PersistentResourcesTransaction) -> Result<T, E> + Send,
+        T: Send,
         E: Send + Sync + 'static,
     {
-        let transaction_result = self.db_connection.lock().unwrap().transaction::<_, TransactionPassthroughError, _>(|connection| {
-            let mut memory = self.memory.lock().unwrap();
-            let mut relayed_subscription_events = RelayedSubscriptionEvents::default();
+        let mut connection = self.db_connection.lock().unwrap();
+        let mut connection = connection.deref_mut();
+        let transaction_result = {
+            connection.transaction::<_, TransactionPassthroughError, _>(|connection| Box::pin(async {
+                let mut memory = self.memory.lock().unwrap();
+                let mut relayed_subscription_events = RelayedSubscriptionEvents::default();
 
-            let transaction = PersistentResourcesTransaction {
-                db_connection: Mutex::new(connection),
-                memory: Mutex::new(&mut memory),
-                relayed_subscription_events: &mut relayed_subscription_events,
-            };
+                let transaction = PersistentResourcesTransaction {
+                    db_connection: Mutex::new(connection),
+                    memory: Mutex::new(&mut memory),
+                    relayed_subscription_events: &mut relayed_subscription_events,
+                };
 
-            let result = futures::executor::block_on(code(transaction));
-            match result {
-                Ok(ok) => Ok((ok, relayed_subscription_events)),
-                Err(error) => Err(TransactionPassthroughError::Passthrough(Box::new(error))), //passthrough via an Err-value to trigger transaction rollback
-            }
-        });
+                let result = tokio::runtime::Handle::current().block_on(code(transaction));
+                match result {
+                    Ok(ok) => Ok((ok, relayed_subscription_events)),
+                    Err(error) => Err(TransactionPassthroughError::Passthrough(Box::new(error))), //passthrough via an Err-value to trigger transaction rollback
+                }
+            }))
+        };
+
+        let transaction_result = transaction_result.await;
 
         match transaction_result {
             Ok((result, relayed_subscription_events)) => Ok((Ok(result), relayed_subscription_events)),
@@ -80,80 +88,80 @@ impl PersistentResourcesStorage {
     }
 }
 impl ResourcesStorageApi for PersistentResourcesStorage {
-    fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
+    async fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
     where R: Resource + Persistable {
         let mut db = self.db_connection.lock().unwrap();
         let db = Db::from_connection(&mut db);
         let mut storage = Storage { db, memory: &mut self.memory.lock().unwrap() };
-        resource.insert(id, &mut storage)
+        resource.insert(id, &mut storage).await
     }
 
-    fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
+    async fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Persistable {
         let mut db = self.db_connection.lock().unwrap();
         let db = Db::from_connection(&mut db);
         let mut storage = Storage { db, memory: &mut self.memory.lock().unwrap() };
-        R::remove(id, &mut storage)
+        R::remove(id, &mut storage).await
     }
 
-    fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
+    async fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Persistable + Clone {
         let mut db = self.db_connection.lock().unwrap();
         let db = Db::from_connection(&mut db);
         let storage = Storage { db, memory: &mut self.memory.lock().unwrap() };
-        R::get(id, &storage)
+        R::get(id, &storage).await
     }
 
-    fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
+    async fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
     where R: Resource + Persistable + Clone {
         let mut db = self.db_connection.lock().unwrap();
         let db = Db::from_connection(&mut db);
         let storage = Storage { db, memory: &mut self.memory.lock().unwrap() };
-        R::list(&storage)
+        R::list(&storage).await
     }
 }
 
 
 pub struct PersistentResourcesTransaction<'transaction> {
-    db_connection: Mutex<&'transaction mut PgConnection>,
+    db_connection: Mutex<&'transaction mut AsyncPgConnection>,
     memory: Mutex<&'transaction mut VolatileResourcesStorage>,
     pub relayed_subscription_events: &'transaction mut RelayedSubscriptionEvents,
 }
 impl ResourcesStorageApi for PersistentResourcesTransaction<'_> {
-    fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
+    async fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
     where R: Resource + Persistable {
         let mut db = self.db_connection.lock().unwrap();
         let db = Db::from_connection(&mut db);
         let mut storage = Storage { db, memory: &mut self.memory.lock().unwrap() };
-        resource.insert(id, &mut storage)
+        resource.insert(id, &mut storage).await
     }
 
-    fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
+    async fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Persistable {
         let mut db = self.db_connection.lock().unwrap();
         let db = Db::from_connection(&mut db);
         let mut storage = Storage { db, memory: &mut self.memory.lock().unwrap() };
-        R::remove(id, &mut storage)
+        R::remove(id, &mut storage).await
     }
 
-    fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
+    async fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
     where
         R: Resource + Persistable + Clone
     {
         let mut db = self.db_connection.lock().unwrap();
         let db = Db::from_connection(&mut db);
         let storage = Storage { db, memory: &mut self.memory.lock().unwrap() };
-        R::get(id, &storage)
+        R::get(id, &storage).await
     }
 
-    fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
+    async fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
     where
         R: Resource + Persistable + Clone
     {
         let mut db = self.db_connection.lock().unwrap();
         let db = Db::from_connection(&mut db);
         let storage = Storage { db, memory: &mut self.memory.lock().unwrap() };
-        R::list(&storage)
+        R::list(&storage).await
     }
 }
 

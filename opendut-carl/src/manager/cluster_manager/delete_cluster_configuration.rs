@@ -10,18 +10,18 @@ pub struct DeleteClusterConfigurationParams {
 
 impl Resources<'_> {
     #[tracing::instrument(skip_all, level="trace")]
-    pub fn delete_cluster_configuration(&mut self, params: DeleteClusterConfigurationParams) -> Result<ClusterConfiguration, DeleteClusterConfigurationError> {
+    pub async fn delete_cluster_configuration(&mut self, params: DeleteClusterConfigurationParams) -> Result<ClusterConfiguration, DeleteClusterConfigurationError> {
 
         let cluster_id = params.cluster_id;
 
-        let cluster_deployment = self.get::<ClusterDeployment>(cluster_id)
+        let cluster_deployment = self.get::<ClusterDeployment>(cluster_id).await
             .map_err(|cause| DeleteClusterConfigurationError::Internal { cluster_id, cluster_name: None, cause: cause.to_string() })?;
 
         match cluster_deployment {
             None => {
                 debug!("Deleting cluster configuration <{cluster_id}>.");
 
-                let cluster_configuration = self.remove::<ClusterConfiguration>(cluster_id)
+                let cluster_configuration = self.remove::<ClusterConfiguration>(cluster_id).await
                     .map_err(|cause| DeleteClusterConfigurationError::Internal { cluster_id, cluster_name: None, cause: cause.to_string() })?
                     .ok_or_else(|| DeleteClusterConfigurationError::ClusterConfigurationNotFound { cluster_id })?;
 
@@ -51,7 +51,7 @@ mod tests {
         resource_manager.insert(cluster.id, ClusterDeployment { id: cluster.id }).await?;
 
         let result = resource_manager.resources_mut(async |resources| {
-            resources.delete_cluster_configuration(DeleteClusterConfigurationParams { cluster_id: cluster.id })
+            resources.delete_cluster_configuration(DeleteClusterConfigurationParams { cluster_id: cluster.id }).await
         }).await?;
 
         let expected_error = Err(DeleteClusterConfigurationError::ClusterDeploymentFound { cluster_id: cluster.id });
@@ -64,7 +64,7 @@ mod tests {
         let resource_manager = ResourceManager::new_in_memory();
         let cluster = ClusterFixture::create(resource_manager.clone()).await?;
         let result = resource_manager.resources_mut(async |resources|
-            resources.delete_cluster_configuration(DeleteClusterConfigurationParams { cluster_id: cluster.id })
+            resources.delete_cluster_configuration(DeleteClusterConfigurationParams { cluster_id: cluster.id }).await
         ).await?;
 
         let expected_result = Ok(cluster.configuration);

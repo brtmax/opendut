@@ -19,7 +19,7 @@ impl Resources<'_> {
 
         let peer_id = params.peer;
 
-        let peer_member_states = self.list_peer_member_states()
+        let peer_member_states = self.list_peer_member_states().await
             .map_err(|cause| DeletePeerDescriptorError::Internal { peer_id, peer_name: None, cause: cause.to_string() })?;  // only persistence error possible
         let peer_member_state = peer_member_states.get(&peer_id);
 
@@ -28,7 +28,7 @@ impl Resources<'_> {
         } else {
             debug!("Deleting peer descriptor of peer <{peer_id}>.");
 
-            let peer_descriptor = self.remove::<PeerDescriptor>(peer_id)
+            let peer_descriptor = self.remove::<PeerDescriptor>(peer_id).await
                 .map_err(|cause| DeletePeerDescriptorError::Internal { peer_id, peer_name: None, cause: cause.to_string() })?
                 .ok_or_else(|| DeletePeerDescriptorError::PeerNotFound { peer_id })?;
 

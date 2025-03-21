@@ -53,7 +53,8 @@ impl ResourceStorage {
 
     pub(super) async fn resources_mut<T, E, F>(&mut self, global: GlobalResourcesRef, code: F) -> PersistenceResult<(Result<T, E>, RelayedSubscriptionEvents)>
     where
-        F: AsyncFnOnce(&mut Resources) -> Result<T, E>,
+        F: AsyncFnOnce(&mut Resources) -> Result<T, E> + Send,
+        T: Send,
         E: Send + Sync + 'static,
     {
         match self {
@@ -160,15 +161,15 @@ impl Password {
 }
 
 pub trait ResourcesStorageApi {
-    fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
+    async fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
     where R: Resource + Persistable + Subscribable;
 
-    fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
+    async fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Persistable;
 
-    fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
+    async fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Persistable + Clone;
 
-    fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
+    async fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
     where R: Resource + Persistable + Clone;
 }

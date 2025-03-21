@@ -12,11 +12,11 @@ pub mod peer_descriptor;
 mod peer_connection_state;
 
 pub trait Persistable: Send + Sync + Sized + Debug + Resource {
-    fn insert(self, id: Self::Id, storage: &mut Storage) -> PersistenceResult<()>;
+    async fn insert(self, id: Self::Id, storage: &mut Storage) -> PersistenceResult<()>;
 
-    fn remove(id: Self::Id, storage: &mut Storage) -> PersistenceResult<Option<Self>>;
+    async fn remove(id: Self::Id, storage: &mut Storage) -> PersistenceResult<Option<Self>>;
 
-    fn get(id: Self::Id, storage: &Storage) -> PersistenceResult<Option<Self>>;
+    async fn get(id: Self::Id, storage: &Storage) -> PersistenceResult<Option<Self>>;
 
-    fn list(storage: &Storage) -> PersistenceResult<HashMap<Self::Id, Self>>;
+    async fn list(storage: &Storage) -> PersistenceResult<HashMap<Self::Id, Self>>;
 }

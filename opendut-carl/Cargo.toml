@@ -22,6 +22,7 @@ backon = { workspace = true }
 chrono = { workspace = true }
 config = { workspace = true }
 diesel = { workspace = true, features = ["postgres", "pq-src", "uuid", "serde_json"] }
+diesel-async = { workspace = true, features = ["postgres", "async-connection-wrapper", "bb8"] }
 diesel_migrations = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }

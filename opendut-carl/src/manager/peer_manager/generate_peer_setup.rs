@@ -42,7 +42,7 @@ impl Resources<'_> {
 
         debug!("Generating PeerSetup for peer <{peer_id}>");
 
-        let peer_descriptor = self.get::<PeerDescriptor>(peer_id)
+        let peer_descriptor = self.get::<PeerDescriptor>(peer_id).await
             .map_err(|source| GeneratePeerSetupError::Persistance { peer_id, source })?
             .ok_or(GeneratePeerSetupError::PeerNotFound(peer_id))?;
 

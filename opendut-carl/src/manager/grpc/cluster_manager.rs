@@ -70,7 +70,7 @@ impl ClusterManagerService for ClusterManagerFacade {
             reply: Some(response)
         }))
     }
-    #[tracing::instrument(skip_all, level="trace")]
+    // #[tracing::instrument(skip_all, level="trace")]
     async fn delete_cluster_configuration(&self, request: Request<DeleteClusterConfigurationRequest>) -> Result<Response<DeleteClusterConfigurationResponse>, Status> {
 
         let request = request.into_inner();
@@ -81,7 +81,7 @@ impl ClusterManagerService for ClusterManagerFacade {
         let result = self.resource_manager.resources_mut(async |resources|
             resources.delete_cluster_configuration(DeleteClusterConfigurationParams {
                 cluster_id,
-            })
+            }).await
         ).await;
 
         let response = match result {

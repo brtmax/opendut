@@ -15,8 +15,8 @@ pub enum ListPeerMemberStatesError {
 }
 
 impl Resources<'_> {
-    pub fn list_peer_member_states(&self) -> Result<HashMap<PeerId, PeerMemberState>, PersistenceError> {
-        let deployed_clusters = cluster_manager::internal::list_deployed_clusters(self)?;
+    pub async fn list_peer_member_states(&self) -> Result<HashMap<PeerId, PeerMemberState>, PersistenceError> {
+        let deployed_clusters = cluster_manager::internal::list_deployed_clusters(self).await?;
         let deployed_devices = deployed_clusters.into_iter()
             .flat_map(|deployed_cluster| {
                 let cluster_id = deployed_cluster.id;
@@ -25,7 +25,7 @@ impl Resources<'_> {
             .collect::<HashMap<_, _>>();
 
 
-        let all_peers = self.list::<PeerDescriptor>()?;
+        let all_peers = self.list::<PeerDescriptor>().await?;
 
         let peer_member_states = all_peers.into_values()
             .map(|peer | {
@@ -80,7 +80,7 @@ mod tests {
 
         // Act
         let peer_member_states = resource_manager.resources(async |resources|
-            resources.list_peer_member_states()
+            resources.list_peer_member_states().await
         ).await?;
 
         // Assert

@@ -6,13 +6,13 @@ use std::collections::{HashSet};
 pub mod internal {
     use super::*;
 
-    pub(crate) fn list_deployed_clusters(resources: &impl ResourcesStorageApi) -> Result<Vec<ClusterConfiguration>, PersistenceError> {
-        let cluster_deployments = resources.list::<ClusterDeployment>()?
+    pub(crate) async fn list_deployed_clusters(resources: &impl ResourcesStorageApi) -> Result<Vec<ClusterConfiguration>, PersistenceError> {
+        let cluster_deployments = resources.list::<ClusterDeployment>().await?
             .into_values()
             .map(|cluster_deployment| cluster_deployment.id)
             .collect::<HashSet<_>>();
 
-        let cluster_configurations = resources.list::<ClusterConfiguration>()?;
+        let cluster_configurations = resources.list::<ClusterConfiguration>().await?;
         let deployed_cluster_configurations = cluster_configurations.into_values()
             .filter(|cluster_configuration| {
                 cluster_deployments.contains(&cluster_configuration.id)

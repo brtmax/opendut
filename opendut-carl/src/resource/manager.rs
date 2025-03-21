@@ -40,7 +40,7 @@ impl ResourceManager {
         let mut state = self.state.write().await;
 
         let (result, relayed_subscription_events) = state.storage.resources_mut(self.global.clone(), async |transaction| {
-            transaction.insert(id.clone(), resource.clone())
+            transaction.insert(id.clone(), resource.clone()).await
         }).await?;
         Self::send_relayed_subscription_events(relayed_subscription_events, &mut state).await;
         result
@@ -50,7 +50,7 @@ impl ResourceManager {
     where R: Resource + Persistable {
         let mut state = self.state.write().await;
         let (result, relayed_subscription_events) = state.storage.resources_mut(self.global.clone(), async move |transaction| {
-            transaction.remove(id)
+            transaction.remove(id).await
         }).await?;
         Self::send_relayed_subscription_events(relayed_subscription_events, &mut state).await;
         result
@@ -59,13 +59,13 @@ impl ResourceManager {
     pub async fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Persistable + Clone {
         let state = self.state.read().await;
-        state.storage.resources(self.global.clone(), async |resources| resources.get(id)).await
+        state.storage.resources(self.global.clone(), async |resources| resources.get(id).await).await
     }
 
     pub async fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
     where R: Resource + Persistable + Clone {
         let state = self.state.read().await;
-        state.storage.resources(self.global.clone(), async |resources| resources.list()).await
+        state.storage.resources(self.global.clone(), async |resources| resources.list().await).await
     }
 
     pub async fn resources<F, T>(&self, f: F) -> T
@@ -84,7 +84,8 @@ impl ResourceManager {
     /// - Groups the async calls, so we only have to await at the end.
     pub async fn resources_mut<F, T, E>(&self, function: F) -> PersistenceResult<Result<T, E>>
     where
-        F: AsyncFnOnce(&mut Resources) -> Result<T, E>,
+        F: AsyncFnOnce(&mut Resources) -> Result<T, E> + Send,
+        T: Send,
         E: Send + Sync + 'static,
     {
         let mut state = self.state.write().await;
@@ -273,7 +274,7 @@ mod test {
         assert_that!(testee.get::<PeerDescriptor>(peer_resource_id).await?, some(eq(&peer)));
 
         testee.resources(async |resources| {
-            resources.list::<ClusterConfiguration>()?
+            resources.list::<ClusterConfiguration>().await?
                 .into_iter()
                 .for_each(|(_cluster_id, cluster)| {
                     assert_that!(cluster, eq(&cluster_configuration));

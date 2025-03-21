@@ -10,12 +10,12 @@ use tracing::debug;
 
 impl Resources<'_> {
     #[tracing::instrument(skip_all, level="trace")]
-    pub fn list_peer_states(&self) -> Result<HashMap<PeerId, PeerState>, ListPeerStatesError> {
+    pub async fn list_peer_states(&self) -> Result<HashMap<PeerId, PeerState>, ListPeerStatesError> {
 
         debug!("Querying all peer states.");
-        let peer_states = (|| {
-            let peer_member_states = self.list_peer_member_states()?;
-            let peer_connection_states = self.list::<PeerConnectionState>()?;
+        let peer_states = (async || {
+            let peer_member_states = self.list_peer_member_states().await?;
+            let peer_connection_states = self.list::<PeerConnectionState>().await?;
 
             let peer_states = peer_member_states.into_iter()
                 .map(|(peer_id, member)| {
@@ -30,7 +30,7 @@ impl Resources<'_> {
                 .collect::<Result<HashMap<_, _>, _>>()?;
 
             PersistenceResult::Ok(peer_states)
-        })()
+        })().await
         .map_err(|cause| ListPeerStatesError::Internal { cause: cause.to_string() })?;
 
         debug!("Successfully queried all peer states.");

@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
-
 use opendut_carl_api::carl::broker::stream_header;
 use opendut_carl_api::proto::services::peer_messaging_broker::upstream;
 use opendut_carl_api::proto::services::peer_messaging_broker::Pong;
@@ -158,10 +157,10 @@ impl PeerMessagingBroker {
 
     async fn update_peer_connection_state(&self, peer_id: PeerId, remote_host: IpAddr) -> Result<(), OpenError> {
         self.resource_manager.resources_mut(async |resources| {
-            let maybe_peer_state = resources.get::<PeerConnectionState>(peer_id)
+            let maybe_peer_state = resources.get::<PeerConnectionState>(peer_id).await
                 .map_err(|source| OpenError::Persistence { peer_id, source })?;
 
-            match maybe_peer_state {
+            let new_peer_connection_state = match maybe_peer_state {
                 None => {
                     info!("Peer <{peer_id}> had not been seen before.");
                     Ok(PeerConnectionState::Online { remote_host })
@@ -176,11 +175,12 @@ impl PeerMessagingBroker {
                         Err(OpenError::PeerAlreadyConnected { peer_id })
                     }
                 }
+            };
+            if let Ok(new_peer_connection_state) = new_peer_connection_state {
+                resources.insert(peer_id, new_peer_connection_state).await
+                    .map_err(|source| OpenError::Persistence { peer_id, source })?;
             }
-                .and_then(|new_peer_connection_state| {
-                    resources.insert(peer_id, new_peer_connection_state)
-                        .map_err(|source| OpenError::Persistence { peer_id, source })
-                })
+            Ok(())
         }).await
             .map_err(|source| OpenError::Persistence { peer_id, source })??;
 
@@ -310,7 +310,7 @@ mod tests {
             assert!(peers.get(&peer_id).is_some());
 
             let peer_connection_state = resource_manager.resources(async |resources| {
-                resources.get::<PeerConnectionState>(peer_id)
+                resources.get::<PeerConnectionState>(peer_id).await
             }).await?;
             let peer_connection_state = peer_connection_state.unwrap_or_else(|| panic!("PeerConnectionState for peer <{peer_id}> should exist."));
             match peer_connection_state {
@@ -354,7 +354,7 @@ mod tests {
             assert!(peers.get(&peer_id).is_none());
 
             let peer_connection_state = resource_manager.resources(async |resources| {
-                resources.get::<PeerConnectionState>(peer_id)
+                resources.get::<PeerConnectionState>(peer_id).await
             }).await?;
             let peer_connection_state = peer_connection_state.unwrap_or_else(|| panic!("PeerConnectionState for peer <{peer_id}> should exist."));
             match peer_connection_state {

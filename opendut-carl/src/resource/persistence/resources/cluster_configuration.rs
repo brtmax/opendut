@@ -6,22 +6,23 @@ use opendut_types::cluster::{ClusterConfiguration, ClusterId};
 use std::collections::HashMap;
 
 impl Persistable for ClusterConfiguration {
-    fn insert(self, _id: ClusterId, storage: &mut Storage) -> PersistenceResult<()> {
+    async fn insert(self, _id: ClusterId, storage: &mut Storage<'_>) -> PersistenceResult<()> {
         let mut connection = storage.db.connection();
 
-        query::cluster_configuration::insert(self, &mut connection)
+        query::cluster_configuration::insert(self, &mut connection).await
     }
 
-    fn remove(cluster_id: ClusterId, storage: &mut Storage) -> PersistenceResult<Option<Self>> {
-        query::cluster_configuration::remove(cluster_id, &mut storage.db.connection())
+    async fn remove(cluster_id: ClusterId, storage: &mut Storage<'_>) -> PersistenceResult<Option<Self>> {
+        query::cluster_configuration::remove(cluster_id, &mut storage.db.connection()).await
     }
 
-    fn get(cluster_id: ClusterId, storage: &Storage) -> PersistenceResult<Option<Self>> {
-        let result = query::cluster_configuration::list(Filter::By(cluster_id), &mut storage.db.connection())?.values().next().cloned();
+    async fn get(cluster_id: ClusterId, storage: &Storage<'_>) -> PersistenceResult<Option<Self>> {
+        let result = query::cluster_configuration::list(Filter::By(cluster_id), &mut storage.db.connection()).await?
+            .values().next().cloned();
         Ok(result)
     }
 
-    fn list(storage: &Storage) -> PersistenceResult<HashMap<Self::Id, Self>> {
-        query::cluster_configuration::list(Filter::Not, &mut storage.db.connection())
+    async fn list(storage: &Storage<'_>) -> PersistenceResult<HashMap<Self::Id, Self>> {
+        query::cluster_configuration::list(Filter::Not, &mut storage.db.connection()).await
     }
 }

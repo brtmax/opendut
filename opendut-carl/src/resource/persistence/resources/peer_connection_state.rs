@@ -7,19 +7,19 @@ use opendut_types::peer::PeerId;
 use std::collections::HashMap;
 
 impl Persistable for PeerConnectionState {
-    fn insert(self, id: PeerId, storage: &mut Storage) -> PersistenceResult<()> {
-        storage.memory.insert(id, self)
+    async fn insert(self, id: PeerId, storage: &mut Storage<'_>) -> PersistenceResult<()> {
+        storage.memory.insert(id, self).await
     }
 
-    fn remove(id: PeerId, storage: &mut Storage) -> PersistenceResult<Option<Self>> {
-        storage.memory.remove(id)
+    async fn remove(id: PeerId, storage: &mut Storage<'_>) -> PersistenceResult<Option<Self>> {
+        storage.memory.remove(id).await
     }
 
-    fn get(id: PeerId, storage: &Storage) -> PersistenceResult<Option<Self>> {
-        storage.memory.get(id)
+    async fn get(id: PeerId, storage: &Storage<'_>) -> PersistenceResult<Option<Self>> {
+        storage.memory.get(id).await
     }
 
-    fn list(storage: &Storage) -> PersistenceResult<HashMap<Self::Id, Self>> {
-        storage.memory.list()
+    async fn list(storage: &Storage<'_>) -> PersistenceResult<HashMap<Self::Id, Self>> {
+        storage.memory.list().await
     }
 }

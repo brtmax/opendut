@@ -13,11 +13,11 @@ pub async fn list_cluster_peers(params: ListClusterPeersParams) -> Result<Vec<Pe
     let ListClusterPeersParams { resource_manager, cluster_id } = params;
 
     let cluster_peers = resource_manager.resources(async |resources| {
-        let cluster_configuration = resources.get::<ClusterConfiguration>(cluster_id)
+        let cluster_configuration = resources.get::<ClusterConfiguration>(cluster_id).await
             .map_err(|source| ListClusterPeersError::Persistence { cluster_id, source })?
             .ok_or_else(|| ListClusterPeersError::ClusterNotFound(cluster_id))?;
 
-        let peers = resources.list::<PeerDescriptor>()
+        let peers = resources.list::<PeerDescriptor>().await
             .map_err(|source| ListClusterPeersError::Persistence { cluster_id, source })?;
 
         let cluster_peers = peers.into_values()

@@ -14,15 +14,16 @@ impl Resources<'_> {
 
         let DeleteClusterDeploymentParams { cluster_id } = params;
 
-        let (deployment, cluster) =
-            self.remove::<ClusterDeployment>(cluster_id)
+        let (deployment, cluster) = {
+            let removed_deployment = self.remove::<ClusterDeployment>(cluster_id).await
                 .map_err(|cause| DeleteClusterDeploymentError::Internal { cluster_id, cluster_name: None, cause: cause.to_string() })?
-                .map(|deployment| {
-                    let configuration = self.get::<ClusterConfiguration>(cluster_id)
-                        .map_err(|cause| DeleteClusterDeploymentError::Internal { cluster_id, cluster_name: None, cause: cause.to_string() })?;
-                    Ok((deployment, configuration))
-                })
-                .ok_or(DeleteClusterDeploymentError::ClusterDeploymentNotFound { cluster_id })??;
+                .ok_or(DeleteClusterDeploymentError::ClusterDeploymentNotFound { cluster_id })?;
+
+            let cluster_configuration = self.get::<ClusterConfiguration>(cluster_id).await
+                .map_err(|cause| DeleteClusterDeploymentError::Internal { cluster_id, cluster_name: None, cause: cause.to_string() })?;
+
+            (removed_deployment, cluster_configuration)
+        };
 
         if let Some(cluster) = cluster {
             if let Vpn::Enabled { vpn_client } = self.global.get::<Vpn>() {

@@ -23,7 +23,7 @@ pub async fn get_peer_state(params: GetPeerStateParams) -> Result<PeerState, Get
             let peer_member_state = resources.get_peer_member_state(peer_id)
                 .map_err(|cause| GetPeerStateError::Internal { peer_id, cause: cause.to_string() })?
                 .ok_or_else(|| GetPeerStateError::PeerNotFound { peer_id })?;
-            let connection = resources.get::<PeerConnectionState>(peer_id)
+            let connection = resources.get::<PeerConnectionState>(peer_id).await
                 .map_err(|cause| GetPeerStateError::Internal { peer_id, cause: cause.to_string() })?  // only persistence error possible
                 .unwrap_or_default();
 
@@ -53,7 +53,6 @@ mod tests {
     use opendut_carl_api::carl::peer::GetPeerStateError;
     use opendut_types::peer::state::{PeerConnectionState, PeerMemberState, PeerState};
     use opendut_types::peer::{PeerDescriptor, PeerId};
-    use std::sync::Arc;
 
     #[tokio::test]
     async fn should_get_peer_state_down_in_memory() -> anyhow::Result<()> {
@@ -70,11 +69,12 @@ mod tests {
 
     async fn should_get_peer_state(resource_manager: ResourceManagerRef) -> anyhow::Result<()> {
         let peer = PeerFixture::new();
-        peer_manager::store_peer_descriptor(StorePeerDescriptorParams {
-            resource_manager: Arc::clone(&resource_manager),
-            vpn: Vpn::Disabled,
-            peer_descriptor: peer.descriptor,
-        }).await?;
+        resource_manager.resources_mut(async |resources|
+            resources.store_peer_descriptor(StorePeerDescriptorParams {
+                vpn: Vpn::Disabled,
+                peer_descriptor: peer.descriptor,
+            }).await
+        ).await??;
 
         let peer_state = peer_manager::get_peer_state(GetPeerStateParams {
             peer: peer.id,
@@ -101,11 +101,12 @@ mod tests {
     async fn should_throw_error_if_peer_not_found(resource_manager: ResourceManagerRef) -> anyhow::Result<()> {
         let peer = PeerFixture::new();
 
-        peer_manager::store_peer_descriptor(StorePeerDescriptorParams {
-            resource_manager: Arc::clone(&resource_manager),
-            vpn: Vpn::Disabled,
-            peer_descriptor: peer.descriptor,
-        }).await?;
+        resource_manager.resources_mut(async |resources|
+            resources.store_peer_descriptor(StorePeerDescriptorParams {
+                vpn: Vpn::Disabled,
+                peer_descriptor: peer.descriptor,
+            }).await
+        ).await??;
 
         let not_existing_peer_id = PeerId::random();
         assert_that!(resource_manager.get::<PeerDescriptor>(not_existing_peer_id).await?.as_ref(), none());
