@@ -8,18 +8,17 @@ use diesel_async::pooled_connection::bb8::Pool;
 use diesel_async::{AsyncConnection, AsyncPgConnection};
 use std::any::Any;
 use std::collections::HashMap;
-use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 
 pub struct PersistentResourcesStorage {
     db_connection_pool: Pool<AsyncPgConnection>,
-    memory: Mutex<VolatileResourcesStorage>,
+    memory: Arc<Mutex<VolatileResourcesStorage>>,
 }
 impl PersistentResourcesStorage {
     pub async fn connect(database_connect_info: &DatabaseConnectInfo) -> Result<Self, ConnectError> {
         let db_connection_pool = crate::resource::persistence::database::connection_pool(database_connect_info).await?;
         let memory = VolatileResourcesStorage::default();
-        let memory = Mutex::new(memory);
+        let memory = Arc::new(Mutex::new(memory));
 
         Ok(Self { db_connection_pool, memory })
     }
@@ -31,12 +30,11 @@ impl PersistentResourcesStorage {
         let mut connection = self.db_connection_pool.get().await
             .expect("Could not retrieve connection from connection pool."); //FIXME proper error handling
 
-        let mut memory = self.memory.lock().unwrap();
         let mut relayed_subscription_events = RelayedSubscriptionEvents::default();
 
         let transaction = PersistentResourcesTransaction {
-            db_connection: Arc::new(Mutex::new(connection.deref_mut())),
-            memory: Mutex::new(&mut memory),
+            db_connection: Db::from_connection(Arc::new(Mutex::new(&mut connection))),
+            memory: self.memory.clone(),
             relayed_subscription_events: &mut relayed_subscription_events,
         };
 
@@ -57,12 +55,11 @@ impl PersistentResourcesStorage {
 
         let transaction_result = {
             connection.transaction::<_, TransactionPassthroughError, _>(|connection| Box::pin(async {
-                let mut memory = self.memory.lock().unwrap();
                 let mut relayed_subscription_events = RelayedSubscriptionEvents::default();
 
                 let transaction = PersistentResourcesTransaction {
-                    db_connection: Arc::new(Mutex::new(connection)),
-                    memory: Arc::new(Mutex::new(&mut memory)),
+                    db_connection: Db::from_connection(Arc::new(Mutex::new(connection))),
+                    memory: self.memory.clone(),
                     relayed_subscription_events: &mut relayed_subscription_events,
                 };
 
@@ -124,7 +121,7 @@ impl PersistentResourcesStorage {
 
 pub struct PersistentResourcesTransaction<'transaction> {
     db_connection: Db<'transaction>,
-    memory: Memory<'transaction>,
+    memory: Arc<Mutex<Memory>>,
     pub relayed_subscription_events: &'transaction mut RelayedSubscriptionEvents,
 }
 impl ResourcesStorageApi for PersistentResourcesTransaction<'_> {

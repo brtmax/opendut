@@ -1,31 +1,30 @@
 use opendut_types::resources::Id;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
-use std::ops::DerefMut;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use crate::resource::api::id::ResourceId;
 use crate::resource::api::resources::RelayedSubscriptionEvents;
 use crate::resource::api::Resource;
 use crate::resource::persistence::error::PersistenceResult;
 use crate::resource::persistence::resources::Persistable;
-use crate::resource::storage::ResourcesStorageApi;
+use crate::resource::storage::{Memory, ResourcesStorageApi};
 use crate::resource::subscription::Subscribable;
 
 #[derive(Default)]
 pub struct VolatileResourcesStorageHandle {
-    inner: Mutex<VolatileResourcesStorage>,
+    memory: Arc<Mutex<Memory>>,
 }
 impl VolatileResourcesStorageHandle {
     pub async fn resources<T, F>(&self, code: F) -> T
     where
         F: AsyncFnOnce(VolatileResourcesTransaction) -> T,
     {
-        let mut memory = self.inner.lock().unwrap();
+        let mut memory = self.memory.lock().unwrap();
         let mut relayed_subscription_events = RelayedSubscriptionEvents::default();
 
         let transaction = VolatileResourcesTransaction {
-            memory: memory.deref_mut(),
+            memory: &mut memory,
             relayed_subscription_events: &mut relayed_subscription_events,
         };
         let result = code(transaction).await;
@@ -40,11 +39,11 @@ impl VolatileResourcesStorageHandle {
         F: AsyncFnOnce(VolatileResourcesTransaction) -> Result<T, E>,
         E: Send + Sync + 'static,
     {
-        let mut memory = self.inner.lock().unwrap();
+        let mut memory = self.memory.lock().unwrap();
         let mut relayed_subscription_events = RelayedSubscriptionEvents::default();
 
         let transaction = VolatileResourcesTransaction {
-            memory: memory.deref_mut(),
+            memory: &mut memory,
             relayed_subscription_events: &mut relayed_subscription_events,
         };
         let result = code(transaction).await;
@@ -54,15 +53,17 @@ impl VolatileResourcesStorageHandle {
 
 #[derive(Default)]
 pub struct VolatileResourcesStorage {
-    storage: HashMap<TypeId, HashMap<Id, Box<dyn Any + Send + Sync>>>,
+    storage: Mutex<HashMap<TypeId, HashMap<Id, Box<dyn Any + Send + Sync>>>>,
 }
 
 impl ResourcesStorageApi for VolatileResourcesStorage {
 
     async fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
     where R: Resource {
+        let mut storage = self.storage.lock().unwrap();
+
         let id = id.into_id();
-        let column = self.storage
+        let column = storage
             .entry(TypeId::of::<R>())
             .or_default();
         column.insert(id, Box::new(resource));
@@ -71,9 +72,11 @@ impl ResourcesStorageApi for VolatileResourcesStorage {
 
     async fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource {
+        let mut storage = self.storage.lock().unwrap();
+
         let id = id.into_id();
         let type_id = TypeId::of::<R>();
-        match self.column_mut_of::<R>() {
+        match storage.get_mut(&TypeId::of::<R>()) {
             None => Ok(None),
             Some(column) => {
                 let result = column.remove(&id)
@@ -83,7 +86,7 @@ impl ResourcesStorageApi for VolatileResourcesStorage {
                         .ok()
                     );
                 if column.is_empty() {
-                    self.storage.remove(&type_id);
+                    storage.remove(&type_id);
                 }
                 Ok(result)
             }
@@ -92,8 +95,11 @@ impl ResourcesStorageApi for VolatileResourcesStorage {
 
     async fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Clone {
+        let storage = self.storage.lock().unwrap();
+
         let id = id.into_id();
-        let result = self.column_of::<R>()
+
+        let result = storage.get(&TypeId::of::<R>())
             .and_then(|column| column.get(&id))
             .and_then(|resource| resource.downcast_ref().cloned());
         Ok(result)
@@ -101,7 +107,9 @@ impl ResourcesStorageApi for VolatileResourcesStorage {
 
     async fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
     where R: Resource {
-        let result: HashMap<R::Id, R> = match self.column_of::<R>() {
+        let storage = self.storage.lock().unwrap();
+
+        let result: HashMap<R::Id, R> = match storage.get(&TypeId::of::<R>()) {
             Some(column) => {
                 column.iter().map(|(value_id, value)| {
                     let resource = value
@@ -118,24 +126,16 @@ impl ResourcesStorageApi for VolatileResourcesStorage {
         Ok(result)
     }
 }
-impl VolatileResourcesStorage {
-    fn column_of<R>(&self) -> Option<&HashMap<Id, Box<dyn Any + Send + Sync>>>
-    where R: Resource {
-        self.storage.get(&TypeId::of::<R>())
-    }
-
-    fn column_mut_of<R>(&mut self) -> Option<&mut HashMap<Id, Box<dyn Any + Send + Sync>>>
-    where R: Resource {
-        self.storage.get_mut(&TypeId::of::<R>())
-    }
-}
 
 #[cfg(test)]
 impl VolatileResourcesStorageHandle {
-    pub fn contains<R>(&self, id: R::Id) -> bool
+    pub async fn contains<R>(&self, id: R::Id) -> bool
     where R: Resource {
+        let storage = self.memory.lock().unwrap();
+        let storage = storage.storage.lock().unwrap();
+
         let id = id.into_id();
-        if let Some(column) = self.inner.lock().unwrap().column_of::<R>() {
+        if let Some(column) = storage.get(&TypeId::of::<R>()) {
             column.contains_key(&id)
         }
         else {
@@ -144,12 +144,12 @@ impl VolatileResourcesStorageHandle {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.inner.lock().unwrap().storage.is_empty()
+        self.memory.lock().unwrap().storage.lock().unwrap().is_empty()
     }
 }
 
 pub struct VolatileResourcesTransaction<'transaction> {
-    memory: &'transaction mut VolatileResourcesStorage,
+    memory: &'transaction mut Memory,
     pub relayed_subscription_events: &'transaction mut RelayedSubscriptionEvents,
 }
 impl ResourcesStorageApi for VolatileResourcesTransaction<'_> {

@@ -93,12 +93,12 @@ impl ResourceStorage {
 
 pub struct Storage<'a> {
     pub db: Db<'a>,
-    memory: Memory<'a>,
+    memory: Arc<Mutex<Memory>>,
 }
 
-impl<'a> Storage<'a> {
-    pub fn memory(&self) -> MutexGuard<&'a mut VolatileResourcesStorage> {
-        self.memory.lock().expect("error while locking mutex for memory persistence")
+impl Storage<'_> {
+    pub fn memory(&self) -> MutexGuard<Memory> {
+        self.memory.lock().unwrap()
     }
 }
 
@@ -116,7 +116,7 @@ impl<'a> Db<'a> {
     }
 }
 
-pub type Memory<'a> = Arc<Mutex<&'a mut VolatileResourcesStorage>>;
+pub type Memory = VolatileResourcesStorage;
 
 
 
