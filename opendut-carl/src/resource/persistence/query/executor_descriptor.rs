@@ -1,4 +1,5 @@
-use diesel::{Connection, ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl, SelectableHelper};
+use diesel::{Connection, ExpressionMethods, QueryDsl, SelectableHelper};
+use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
 use opendut_types::peer::executor::container::{ContainerCommand, ContainerCommandArgument, ContainerDevice, ContainerEnvironmentVariable, ContainerImage, ContainerName, ContainerPortSpec, ContainerVolume};
 use opendut_types::peer::executor::{ExecutorDescriptor, ExecutorId, ExecutorKind, ResultsUrl};
 use opendut_types::peer::PeerId;
@@ -41,7 +42,7 @@ pub(crate) struct PersistableExecutorKindContainer {
     args: NullRemovingTextArray,
 }
 
-pub fn insert(executor: ExecutorDescriptor, peer_id: PeerId, connection: &mut PgConnection) -> PersistenceResult<()> {
+pub async fn insert(executor: ExecutorDescriptor, peer_id: PeerId, connection: &mut AsyncPgConnection) -> PersistenceResult<()> {
     let ExecutorDescriptor { id, kind, results_url } = executor;
 
     let executor_id = id.uuid;
@@ -93,49 +94,49 @@ pub fn insert(executor: ExecutorDescriptor, peer_id: PeerId, connection: &mut Pg
         peer_id: peer_id.uuid,
     };
 
-    insert_persistable(executor_descriptor, executor_kind_container, executor.id, connection)
+    insert_persistable(executor_descriptor, executor_kind_container, executor.id, connection).await
 }
 
 
-fn insert_persistable(
+async fn insert_persistable(
     executor_descriptor: PersistableExecutorDescriptor,
     maybe_executor_kind_container: Option<PersistableExecutorKindContainer>,
     executor_id: ExecutorId,
-    connection: &mut PgConnection
+    connection: &mut AsyncPgConnection
 ) -> PersistenceResult<()> {
 
-    connection.transaction::<_, PersistenceError, _>(|connection| {
+    connection.transaction::<_, PersistenceError, _>(|connection| Box::pin(async {
 
         diesel::insert_into(schema::executor_descriptor::table)
             .values(&executor_descriptor)
             .on_conflict(schema::executor_descriptor::executor_id)
             .do_update()
             .set(&executor_descriptor)
-            .execute(connection)
+            .execute(connection).await
             .map_err(|cause| PersistenceError::insert::<ExecutorDescriptor>(executor_id.uuid, cause))?;
 
-        maybe_executor_kind_container.map(|executor_kind_container| {
+        if let Some(executor_kind_container) = maybe_executor_kind_container {
             diesel::insert_into(schema::executor_kind_container::table)
                 .values(&executor_kind_container)
                 .on_conflict(schema::executor_kind_container::executor_id)
                 .do_update()
                 .set(&executor_kind_container)
-                .execute(connection)
-                .map_err(|cause| PersistenceError::insert::<PersistableExecutorKindContainer>(executor_id.uuid, cause))
-        }).transpose()?;
+                .execute(connection).await
+                .map_err(|cause| PersistenceError::insert::<PersistableExecutorKindContainer>(executor_id.uuid, cause))?;
+        }
 
         Ok(())
-    })?;
+    })).await?;
 
     Ok(())
 }
 
 
-pub fn list_filtered_by_peer(
+pub async fn list_filtered_by_peer(
     peer_id: PeerId,
-    connection: &mut PgConnection
+    connection: &mut AsyncPgConnection
 ) -> PersistenceResult<Vec<ExecutorDescriptor>> {
-    let persistables = list_filtered_by_peer_id_persistable(peer_id, connection)?;
+    let persistables = list_filtered_by_peer_id_persistable(peer_id, connection).await?;
 
     let result = persistables.into_iter().map(|(persistable_executable_descriptor, persistable_executable_kind_container)| {
         let PersistableExecutorDescriptor { executor_id, kind, results_url, peer_id: _ } = persistable_executable_descriptor;
@@ -154,9 +155,9 @@ pub fn list_filtered_by_peer(
 }
 
 
-fn list_filtered_by_peer_id_persistable(
+async fn list_filtered_by_peer_id_persistable(
     peer_id: PeerId,
-    connection: &mut PgConnection
+    connection: &mut AsyncPgConnection
 ) -> PersistenceResult<Vec<(
     PersistableExecutorDescriptor,
     Option<PersistableExecutorKindContainer>
@@ -165,7 +166,7 @@ fn list_filtered_by_peer_id_persistable(
         .left_join(schema::executor_kind_container::table)
         .filter(schema::executor_descriptor::peer_id.eq(peer_id.uuid))
         .select((PersistableExecutorDescriptor::as_select(), Option::<PersistableExecutorKindContainer>::as_select()))
-        .get_results(connection)
+        .get_results(connection).await
         .map_err(PersistenceError::list::<ExecutorDescriptor>)
 }
 
@@ -249,12 +250,12 @@ fn executor_kind_from_persistable(
     Ok(result)
 }
 
-pub fn remove(executor_id: ExecutorId, connection: &mut PgConnection) -> PersistenceResult<()> {
+pub async fn remove(executor_id: ExecutorId, connection: &mut AsyncPgConnection) -> PersistenceResult<()> {
     diesel::delete(
         schema::executor_descriptor::table
             .filter(schema::executor_descriptor::executor_id.eq(executor_id.uuid))
     )
-    .execute(connection)
+    .execute(connection).await
     .map_err(|cause| PersistenceError::remove::<PersistableExecutorDescriptor>(executor_id, cause))?;
 
     Ok(())

@@ -11,7 +11,7 @@ pub mod peer_configuration;
 pub mod peer_descriptor;
 mod peer_connection_state;
 
-pub trait Persistable: Send + Sync + Sized + Debug + Resource {
+pub(crate) trait Persistable: Send + Sync + Sized + Debug + Resource {
     async fn insert(self, id: Self::Id, storage: &mut Storage) -> PersistenceResult<()>;
 
     async fn remove(id: Self::Id, storage: &mut Storage) -> PersistenceResult<Option<Self>>;

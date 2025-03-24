@@ -43,7 +43,7 @@ mod tests {
         let resource_manager = ResourceManager::new_in_memory();
 
         let result = resource_manager.resources(async |resources|
-            resources.list_devices()
+            resources.list_devices().await
         ).await?;
         assert!(result.is_empty());
 
@@ -57,7 +57,7 @@ mod tests {
 
 
         let result = resource_manager.resources(async |resources|
-            resources.list_devices()
+            resources.list_devices().await
         ).await?;
 
         let result_ids = result.into_iter()

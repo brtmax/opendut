@@ -1,6 +1,6 @@
+use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use crate::resource::persistence::database::schema;
 use crate::resource::persistence::error::{PersistenceError, PersistenceResult};
-use diesel::{PgConnection, RunQueryDsl};
 use opendut_types::topology::DeviceTag;
 use uuid::Uuid;
 
@@ -12,13 +12,13 @@ pub struct PersistableDeviceTag {
     pub device_id: Uuid,
     pub name: String,
 }
-pub fn insert(persistable: PersistableDeviceTag, connection: &mut PgConnection) -> PersistenceResult<()> {
+pub async fn insert(persistable: PersistableDeviceTag, connection: &mut AsyncPgConnection) -> PersistenceResult<()> {
     diesel::insert_into(schema::device_tag::table)
         .values(&persistable)
         .on_conflict((schema::device_tag::device_id, schema::device_tag::name))
         .do_update()
         .set(&persistable)
-        .execute(connection)
+        .execute(connection).await
         .map_err(|cause| PersistenceError::insert::<DeviceTag>(persistable.device_id, cause))?;
     Ok(())
 }

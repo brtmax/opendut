@@ -3,13 +3,16 @@ use backon::Retryable;
 use diesel::{Connection as _, ConnectionError};
 use diesel_async::{AsyncConnection, AsyncPgConnection};
 use diesel_async::async_connection_wrapper::AsyncConnectionWrapper;
+use diesel_async::pooled_connection::{bb8, AsyncDieselConnectionManager};
+use diesel_async::pooled_connection::bb8::Pool;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use tracing::{debug, info, warn};
 use url::Url;
 
+
 pub mod schema;
 
-pub async fn connect(database_connect_info: &DatabaseConnectInfo) -> Result<AsyncPgConnection, ConnectError> {
+pub async fn connection_pool(database_connect_info: &DatabaseConnectInfo) -> Result<Pool<AsyncPgConnection>, ConnectError> {
     let DatabaseConnectInfo { url, username, password } = database_connect_info;
 
     let confidential_url = {
@@ -22,17 +25,16 @@ pub async fn connect(database_connect_info: &DatabaseConnectInfo) -> Result<Asyn
     };
 
     {
-        //Separate connection for migrations, as shown here: https://github.com/weiznich/diesel_async/blob/1c36b653af7d33959721f3959af76bbaa11e83d4/examples/sync-wrapper/src/main.rs
         let connection = confidential_connect(&confidential_url, url.to_string()).await?;
-
         run_pending_migrations(connection).await
             .map_err(|source| ConnectError::Migration { source })?;
     }
 
-    let connection = confidential_connect(&confidential_url, url.to_string()).await?;
-    info!("Connection to database at {url} established!");
+    let connection_manager = AsyncDieselConnectionManager::<AsyncPgConnection>::new(confidential_url);
+    let connection_pool = Pool::builder().build(connection_manager).await?;
+    info!("Connection pool created for database at: {url}");
 
-    Ok(connection)
+    Ok(connection_pool)
 }
 
 async fn confidential_connect(confidential_url: &Url, url: String) -> Result<AsyncPgConnection, ConnectError> {
@@ -58,7 +60,7 @@ async fn confidential_connect(confidential_url: &Url, url: String) -> Result<Asy
             warn!("Connecting to database at {url} failed. Retrying in {after:?}.\n  {cause}");
         })
         .await
-        .map_err(ConnectError::Diesel)
+        .map_err(ConnectError::DieselConnection)
 }
 
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!("src/resource/persistence/database/migrations/");
@@ -91,9 +93,13 @@ type MigrationResult<T> = Result<T, MigrationError>;
 #[derive(Debug, thiserror::Error)]
 pub enum ConnectError {
     #[error("Connection error from Diesel")]
-    Diesel(#[source] diesel::ConnectionError),
+    DieselConnection(#[from] diesel::ConnectionError),
+    #[error("Error while creating connection pool from Diesel.")]
+    DieselConnectionPoolCreate(#[from] diesel_async::pooled_connection::PoolError),
+    #[error("Error while retrieving a connection from the connection pool from Diesel.")]
+    DieselConnectionPoolRetrieve(#[from] bb8::RunError),
     #[error("Error while applying migrations")]
-    Migration { #[source] source: MigrationError },
+    Migration { #[from] source: MigrationError },
 }
 
 
@@ -107,33 +113,6 @@ pub mod testing {
     use testcontainers_modules::testcontainers::ContainerAsync;
     use testcontainers_modules::{postgres, testcontainers::runners::AsyncRunner};
     use url::Url;
-
-    /// Spawns a Postgres Container and returns a connection for testing.
-    /// ```no_run
-    /// # use diesel_async::AsyncPgConnection;
-    /// # use opendut_carl::resource::persistence::database;
-    ///
-    /// #[tokio::test]
-    /// async fn test() {
-    ///     let mut db = database::testing::spawn_and_connect().await?;
-    ///
-    ///     do_something_with_database(db.connection);
-    /// }
-    ///
-    /// # fn do_something_with_database(connection: AsyncPgConnection) {}
-    /// ```
-    pub async fn spawn_and_connect() -> anyhow::Result<PostgresConnection> {
-        let (container, connect_info) = spawn().await?;
-
-        let mut connection = database::connect(&connect_info).await?;
-        connection.begin_test_transaction().await?;
-        Ok(PostgresConnection { container, connection })
-    }
-    pub struct PostgresConnection {
-        #[allow(unused)] //primarily carried along to extend its lifetime until the end of the test (container is stopped when variable is dropped)
-        pub container: ContainerAsync<postgres::Postgres>,
-        pub connection: AsyncPgConnection,
-    }
 
     /// Spawns a Postgres Container and returns a ResourceManager for testing.
     /// ```no_run

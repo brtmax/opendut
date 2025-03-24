@@ -2,13 +2,14 @@ use crate::resource::persistence::database::schema;
 use crate::resource::persistence::error::{PersistenceError, PersistenceResult};
 use crate::resource::persistence::query;
 use crate::resource::persistence::query::device_tag::{device_tag_from_persistable, PersistableDeviceTag};
-use diesel::{ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl, SelectableHelper};
+use diesel::{ExpressionMethods, QueryDsl, SelectableHelper};
+use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use opendut_types::peer::PeerId;
 use opendut_types::topology::{DeviceDescription, DeviceDescriptor, DeviceId, DeviceName, DeviceTag};
 use opendut_types::util::net::NetworkInterfaceId;
 use uuid::Uuid;
 
-pub fn insert(device_descriptor: DeviceDescriptor, connection: &mut PgConnection) -> PersistenceResult<()> {
+pub async fn insert(device_descriptor: DeviceDescriptor, connection: &mut AsyncPgConnection) -> PersistenceResult<()> {
     let DeviceDescriptor { id, name, description, interface, tags } = device_descriptor;
 
     let name = name.value().to_owned();
@@ -20,13 +21,13 @@ pub fn insert(device_descriptor: DeviceDescriptor, connection: &mut PgConnection
         name,
         description,
         network_interface_id,
-    }, connection)?;
+    }, connection).await?;
 
     for tag in tags {
         query::device_tag::insert(PersistableDeviceTag {
             device_id: id.0,
             name: tag.value().to_owned(),
-        }, connection)?;
+        }, connection).await?;
     }
 
     Ok(())
@@ -44,40 +45,46 @@ pub struct PersistableDeviceDescriptor {
     pub network_interface_id: Option<Uuid>,
 }
 
-fn insert_persistable(persistable: PersistableDeviceDescriptor, connection: &mut PgConnection) -> PersistenceResult<()> {
+async fn insert_persistable(persistable: PersistableDeviceDescriptor, connection: &mut AsyncPgConnection) -> PersistenceResult<()> {
     diesel::insert_into(schema::device_descriptor::table)
         .values(&persistable)
         .on_conflict(schema::device_descriptor::device_id)
         .do_update()
         .set(&persistable)
-        .execute(connection)
+        .execute(connection).await
         .map_err(|cause| PersistenceError::insert::<DeviceDescriptor>(persistable.device_id, cause))?;
     Ok(())
 }
 
-pub fn list_filtered_by_peer(peer_id: PeerId, connection: &mut PgConnection) -> PersistenceResult<Vec<DeviceDescriptor>> {
-    schema::device_descriptor::table
-        .left_join(schema::network_interface_descriptor::table)
-        .filter(schema::network_interface_descriptor::peer_id.eq(peer_id.uuid))
-        .select(PersistableDeviceDescriptor::as_select())
-        .get_results(connection)
-        .map_err(PersistenceError::list::<DeviceDescriptor>)?
-        .into_iter()
-        .map(|device| device_descriptor_from_persistable(device, connection))
-        .collect::<Result<_, _>>()
+pub async fn list_filtered_by_peer(peer_id: PeerId, connection: &mut AsyncPgConnection) -> PersistenceResult<Vec<DeviceDescriptor>> {
+    let persistables =
+        schema::device_descriptor::table
+            .left_join(schema::network_interface_descriptor::table)
+            .filter(schema::network_interface_descriptor::peer_id.eq(peer_id.uuid))
+            .select(PersistableDeviceDescriptor::as_select())
+            .get_results(connection).await
+            .map_err(PersistenceError::list::<DeviceDescriptor>)?;
+
+    let mut result = vec![];
+
+    for persistable in persistables {
+        let device_descriptor = device_descriptor_from_persistable(persistable, connection).await?;
+        result.push(device_descriptor);
+    }
+    Ok(result)
 }
 
 
-fn device_descriptor_from_persistable(
+async fn device_descriptor_from_persistable(
     persistable_device_descriptor: PersistableDeviceDescriptor,
-    connection: &mut PgConnection,
+    connection: &mut AsyncPgConnection,
 ) -> PersistenceResult<DeviceDescriptor> {
     let PersistableDeviceDescriptor { device_id, name, description, network_interface_id } = persistable_device_descriptor;
 
     let tags = schema::device_tag::table
         .filter(schema::device_tag::device_id.eq(device_id))
         .select(PersistableDeviceTag::as_select())
-        .get_results(connection)
+        .get_results(connection).await
         .map_err(PersistenceError::list::<DeviceTag>)?
         .into_iter()
         .map(device_tag_from_persistable)
@@ -96,12 +103,12 @@ fn device_descriptor_from_persistable(
     Ok(result)
 }
 
-pub fn remove(device_id: DeviceId, connection: &mut PgConnection) -> PersistenceResult<()> {
+pub async fn remove(device_id: DeviceId, connection: &mut AsyncPgConnection) -> PersistenceResult<()> {
     diesel::delete(
         schema::device_descriptor::table
             .filter(schema::device_descriptor::device_id.eq(device_id.0))
     )
-    .execute(connection)
+    .execute(connection).await
     .map_err(|cause| PersistenceError::remove::<PersistableDeviceDescriptor>(device_id, cause))?;
 
     Ok(())

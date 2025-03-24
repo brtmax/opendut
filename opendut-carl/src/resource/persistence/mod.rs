@@ -25,6 +25,7 @@ pub type Memory = VolatileResourcesStorage;
 
 pub(crate) mod error {
     use std::fmt::{Debug, Display, Formatter};
+    use diesel_async::pooled_connection::bb8;
     use uuid::Uuid;
 
     #[derive(Debug, thiserror::Error)]
@@ -39,6 +40,7 @@ pub(crate) mod error {
         DieselInternal {
             #[from] source: diesel::result::Error,
         },
+        ConnectionPoolRetrieve(#[from] bb8::RunError),
     }
     impl PersistenceError {
         pub fn insert<R>(identifier: impl Debug, cause: impl Into<Cause>) -> Self {
@@ -68,6 +70,7 @@ pub(crate) mod error {
             match &mut self {
                 PersistenceError::Custom { context_messages, .. } => context_messages.push(message.into()),
                 PersistenceError::DieselInternal { .. } => unimplemented!(),
+                PersistenceError::ConnectionPoolRetrieve(_) => unimplemented!(),
             }
             self
         }
@@ -90,7 +93,8 @@ pub(crate) mod error {
                         writeln!(f, "  Source: {source}")
                     ).transpose()?;
                 }
-                PersistenceError::DieselInternal { source } => writeln!(f, "Error internal to Diesel, likely from transaction: {source}")?,
+                Self::DieselInternal { source } => writeln!(f, "Error internal to Diesel, likely from transaction: {source}")?,
+                Self::ConnectionPoolRetrieve(source) => writeln!(f, "Error while retrieving connection from connection pool: {source}")?,
             }
             Ok(())
         }

@@ -19,12 +19,12 @@ async fn should_rollback_from_an_error_during_a_transaction() -> anyhow::Result<
     assert!(result.is_none());
 
     let error = resource_manager.resources_mut(async |resources| {
-        resources.insert(peer_id, peer)?; //will be rolled back
-        let result = resources.get::<PeerDescriptor>(peer_id)?;
+        resources.insert(peer_id, peer).await?; //will be rolled back
+        let result = resources.get::<PeerDescriptor>(peer_id).await?;
         assert!(result.is_some());
 
         let non_existent_cluster_id = ClusterId::random();
-        resources.insert(non_existent_cluster_id, ClusterDeployment { id: non_existent_cluster_id })?; //fails because no Cluster with that ID was created
+        resources.insert(non_existent_cluster_id, ClusterDeployment { id: non_existent_cluster_id }).await?; //fails because no Cluster with that ID was created
 
         Ok::<_, PersistenceError>(())
     }).await;

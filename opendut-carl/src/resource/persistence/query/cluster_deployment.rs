@@ -4,36 +4,36 @@ use crate::resource::persistence::query::Filter;
 use diesel::{ExpressionMethods, QueryDsl};
 use opendut_types::cluster::{ClusterDeployment, ClusterId};
 use std::collections::HashMap;
-use diesel_async::AsyncPgConnection;
+use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use uuid::Uuid;
 
-pub fn insert(cluster_deployment: ClusterDeployment, connection: &mut AsyncPgConnection) -> PersistenceResult<()> {
+pub async fn insert(cluster_deployment: ClusterDeployment, connection: &mut AsyncPgConnection) -> PersistenceResult<()> {
     let ClusterDeployment { id } = cluster_deployment;
 
-    insert_persistable(id, connection)?;
+    insert_persistable(id, connection).await?;
 
     Ok(())
 }
 
-fn insert_persistable(cluster_id: ClusterId, connection: &mut AsyncPgConnection) -> PersistenceResult<()> {
+async fn insert_persistable(cluster_id: ClusterId, connection: &mut AsyncPgConnection) -> PersistenceResult<()> {
     let requested = true;
-    set_deployment_requested(cluster_id, requested, connection, PersistenceOperation::Insert)
+    set_deployment_requested(cluster_id, requested, connection, PersistenceOperation::Insert).await
 }
 
-pub fn remove(cluster_id: ClusterId, connection: &mut AsyncPgConnection) -> PersistenceResult<Option<ClusterDeployment>> {
-    let result = list(Filter::By(cluster_id), connection)?.values().next().cloned();
+pub async fn remove(cluster_id: ClusterId, connection: &mut AsyncPgConnection) -> PersistenceResult<Option<ClusterDeployment>> {
+    let result = list(Filter::By(cluster_id), connection).await?.values().next().cloned();
 
     let requested = false;
-    set_deployment_requested(cluster_id, requested, connection, PersistenceOperation::Remove)?;
+    set_deployment_requested(cluster_id, requested, connection, PersistenceOperation::Remove).await?;
 
     Ok(result)
 }
 
-fn set_deployment_requested(cluster_id: ClusterId, value: bool, connection: &mut AsyncPgConnection, operation: PersistenceOperation) -> PersistenceResult<()> {
+async fn set_deployment_requested(cluster_id: ClusterId, value: bool, connection: &mut AsyncPgConnection, operation: PersistenceOperation) -> PersistenceResult<()> {
     let result = diesel::update(schema::cluster_configuration::table) //TODO error when non-existent?
         .filter(schema::cluster_configuration::cluster_id.eq(cluster_id.0))
         .set(schema::cluster_configuration::deployment_requested.eq(value))
-        .execute(connection);
+        .execute(connection).await;
 
     match result {
         Ok(changed_rows) if changed_rows > 0 => Ok(()),
@@ -42,7 +42,7 @@ fn set_deployment_requested(cluster_id: ClusterId, value: bool, connection: &mut
     }
 }
 
-pub fn list(filter_by_cluster_id: Filter<ClusterId>, connection: &mut AsyncPgConnection) -> PersistenceResult<HashMap<ClusterId, ClusterDeployment>> {
+pub async fn list(filter_by_cluster_id: Filter<ClusterId>, connection: &mut AsyncPgConnection) -> PersistenceResult<HashMap<ClusterId, ClusterDeployment>> {
     let cluster_deployment_ids: Vec<Uuid> = {
         let mut query = schema::cluster_configuration::table.into_boxed();
 
@@ -53,7 +53,7 @@ pub fn list(filter_by_cluster_id: Filter<ClusterId>, connection: &mut AsyncPgCon
         query
             .filter(schema::cluster_configuration::deployment_requested.eq(true))
             .select(schema::cluster_configuration::cluster_id)
-            .get_results(connection)
+            .get_results(connection).await
             .map_err(PersistenceError::list::<ClusterDeployment>)?
     };
 

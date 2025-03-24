@@ -42,7 +42,7 @@ impl ClusterManagerService for ClusterManagerFacade {
         let result = self.resource_manager.resources_mut(async |resources|
             resources.create_cluster_configuration(CreateClusterConfigurationParams {
                 cluster_configuration: cluster_configuration.clone(),
-            })
+            }).await
         ).await;
 
         let response = match result {

@@ -20,7 +20,7 @@ pub async fn get_peer_state(params: GetPeerStateParams) -> Result<PeerState, Get
         debug!("Querying state of peer with peer_id <{}>.", peer_id);
 
         let peer_state: Result<PeerState, GetPeerStateError> = resource_manager.resources(async |resources| {
-            let peer_member_state = resources.get_peer_member_state(peer_id)
+            let peer_member_state = resources.get_peer_member_state(peer_id).await
                 .map_err(|cause| GetPeerStateError::Internal { peer_id, cause: cause.to_string() })?
                 .ok_or_else(|| GetPeerStateError::PeerNotFound { peer_id })?;
             let connection = resources.get::<PeerConnectionState>(peer_id).await

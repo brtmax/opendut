@@ -28,7 +28,7 @@ impl VolatileResourcesStorageHandle {
             memory: memory.deref_mut(),
             relayed_subscription_events: &mut relayed_subscription_events,
         };
-        let result = tokio::runtime::Handle::current().block_on(code(transaction));
+        let result = code(transaction).await;
 
         debug_assert!(relayed_subscription_events.is_empty(), "Read-only storage operations should not trigger any subscription events.");
 
@@ -47,7 +47,7 @@ impl VolatileResourcesStorageHandle {
             memory: memory.deref_mut(),
             relayed_subscription_events: &mut relayed_subscription_events,
         };
-        let result = tokio::runtime::Handle::current().block_on(code(transaction));
+        let result = code(transaction).await;
         Ok((result, relayed_subscription_events))
     }
 }

@@ -131,9 +131,9 @@ mod tests {
         };
         let peer_configuration = PeerConfiguration::default();
         resource_manager.resources_mut(async |resources| {
-            resources.insert(peer_id, peer_descriptor())?;
-            resources.insert(peer_id, Clone::clone(&old_peer_configuration))?;
-            resources.insert(peer_id, Clone::clone(&peer_configuration))
+            resources.insert(peer_id, peer_descriptor()).await?;
+            resources.insert(peer_id, Clone::clone(&old_peer_configuration)).await?;
+            resources.insert(peer_id, Clone::clone(&peer_configuration)).await
         }).await??;
 
         let (_, mut receiver) = peer_messaging_broker.open(peer_id, IpAddr::from_str("1.2.3.4")?, stream_header::ExtraHeaders::default()).await?;
