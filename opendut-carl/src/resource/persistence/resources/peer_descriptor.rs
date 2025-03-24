@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use super::Persistable;
 use crate::resource::persistence::error::PersistenceResult;
 use crate::resource::persistence::query::Filter;
-use crate::resource::persistence::{query, Storage};
+use crate::resource::persistence::query;
+use crate::resource::storage::Storage;
 
 impl Persistable for PeerDescriptor {
     async fn insert(self, _peer_id: PeerId, storage: &mut Storage<'_>) -> PersistenceResult<()> {

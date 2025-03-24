@@ -1,6 +1,6 @@
 use crate::resource::persistence::error::PersistenceResult;
 use crate::resource::persistence::resources::Persistable;
-use crate::resource::persistence::Storage;
+use crate::resource::storage::Storage;
 use crate::resource::storage::ResourcesStorageApi;
 use opendut_types::peer::state::PeerConnectionState;
 use opendut_types::peer::PeerId;

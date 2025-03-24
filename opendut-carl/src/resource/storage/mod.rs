@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use url::Url;
+use std::sync::{Arc, Mutex, MutexGuard};
+use diesel_async::AsyncPgConnection;
 use crate::resource::api::global::GlobalResourcesRef;
 use crate::resource::api::resources::{RelayedSubscriptionEvents, Resources};
 use crate::resource::api::Resource;
@@ -7,7 +9,7 @@ use crate::resource::persistence::database::ConnectError;
 use crate::resource::persistence::error::PersistenceResult;
 use crate::resource::persistence::resources::Persistable;
 use crate::resource::storage::persistent::PersistentResourcesStorage;
-use crate::resource::storage::volatile::VolatileResourcesStorageHandle;
+use crate::resource::storage::volatile::{VolatileResourcesStorage, VolatileResourcesStorageHandle};
 use crate::resource::subscription::Subscribable;
 
 pub mod volatile;
@@ -87,6 +89,35 @@ impl ResourceStorage {
         }
     }
 }
+
+
+pub struct Storage<'a> {
+    pub db: Db<'a>,
+    memory: Memory<'a>,
+}
+
+impl<'a> Storage<'a> {
+    pub fn memory(&self) -> MutexGuard<&'a mut VolatileResourcesStorage> {
+        self.memory.lock().expect("error while locking mutex for memory persistence")
+    }
+}
+
+#[derive(Clone)]
+pub struct Db<'a> {
+    pub inner: Arc<Mutex<&'a mut AsyncPgConnection>>, //Mutex rather than RwLock, because we share this between threads (i.e. we need it to implement `Sync`) //TODO still true?
+}
+
+impl<'a> Db<'a> {
+    pub fn from_connection(connection: Arc<Mutex<&'a mut AsyncPgConnection>>) -> Db<'a> {
+        Self { inner: connection }
+    }
+    pub fn connection(&self) -> MutexGuard<&'a mut AsyncPgConnection> {
+        self.inner.lock().expect("error while locking mutex for database connection")
+    }
+}
+
+pub type Memory<'a> = Arc<Mutex<&'a mut VolatileResourcesStorage>>;
+
 
 
 #[derive(Debug, thiserror::Error)]

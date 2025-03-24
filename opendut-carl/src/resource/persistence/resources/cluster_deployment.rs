@@ -3,8 +3,8 @@ use std::collections::HashMap;
 
 use crate::resource::persistence::error::PersistenceResult;
 use crate::resource::persistence::query::Filter;
-use crate::resource::persistence::{query, Storage};
-
+use crate::resource::persistence::query;
+use crate::resource::storage::Storage;
 use super::Persistable;
 
 impl Persistable for ClusterDeployment {

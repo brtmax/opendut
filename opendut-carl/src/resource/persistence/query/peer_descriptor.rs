@@ -144,20 +144,20 @@ pub async fn list(filter_by_peer_id: Filter<PeerId>, connection: &mut AsyncPgCon
         let executors = query::executor_descriptor::list_filtered_by_peer(peer_id, connection).await?;
 
         result.insert(
-               peer_id,
-               PeerDescriptor {
-                   id: peer_id,
-                   name,
-                   location,
-                   network: PeerNetworkDescriptor {
-                       interfaces: network_interfaces,
-                       bridge_name: network_bridge_name,
-                   },
-                   topology: Topology {
-                       devices,
-                   },
-                   executors: ExecutorDescriptors { executors },
-               }
+            peer_id,
+            PeerDescriptor {
+                id: peer_id,
+                name,
+                location,
+                network: PeerNetworkDescriptor {
+                    interfaces: network_interfaces,
+                    bridge_name: network_bridge_name,
+                },
+                topology: Topology {
+                    devices,
+                },
+                executors: ExecutorDescriptors { executors },
+            }
         );
     }
     Ok(result)

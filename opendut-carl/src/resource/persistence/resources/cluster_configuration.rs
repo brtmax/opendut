@@ -1,9 +1,10 @@
 use super::Persistable;
 use crate::resource::persistence::error::PersistenceResult;
 use crate::resource::persistence::query::Filter;
-use crate::resource::persistence::{query, Storage};
+use crate::resource::persistence::query;
 use opendut_types::cluster::{ClusterConfiguration, ClusterId};
 use std::collections::HashMap;
+use crate::resource::storage::Storage;
 
 impl Persistable for ClusterConfiguration {
     async fn insert(self, _id: ClusterId, storage: &mut Storage<'_>) -> PersistenceResult<()> {

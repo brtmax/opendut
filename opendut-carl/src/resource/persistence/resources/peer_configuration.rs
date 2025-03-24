@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::resource::persistence::error::PersistenceResult;
 use crate::resource::persistence::resources::Persistable;
-use crate::resource::persistence::Storage;
+use crate::resource::storage::Storage;
 use crate::resource::storage::ResourcesStorageApi;
 
 impl Persistable for PeerConfiguration {

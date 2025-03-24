@@ -1,6 +1,6 @@
 use crate::resource::api::Resource;
 use crate::resource::persistence::error::PersistenceResult;
-use crate::resource::persistence::Storage;
+use crate::resource::storage::Storage;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
