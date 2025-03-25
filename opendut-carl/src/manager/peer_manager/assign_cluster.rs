@@ -1,6 +1,5 @@
 use crate::manager::peer_messaging_broker::PeerMessagingBrokerRef;
 use crate::resource::persistence::error::PersistenceError;
-use crate::resource::storage::ResourcesStorageApi;
 use opendut_carl_api::proto::services::peer_messaging_broker::{downstream, ApplyPeerConfiguration};
 use opendut_types::cluster::ClusterAssignment;
 use opendut_types::peer::configuration::parameter;

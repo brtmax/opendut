@@ -39,8 +39,8 @@ impl<'transaction> Resources<'transaction> {
         }
     }
 }
-impl ResourcesStorageApi for Resources<'_> {
-    async fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
+impl Resources<'_> {
+    pub(crate) async fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
     where R: Resource + Persistable + Subscribable {
         match &mut self.kind {
             ResourcesKind::Persistent(transaction) => {
@@ -64,7 +64,7 @@ impl ResourcesStorageApi for Resources<'_> {
         }
     }
 
-    async fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
+    pub(crate) async fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Persistable {
         match &mut self.kind {
             ResourcesKind::Persistent(transaction) => transaction.remove(id).await,
@@ -72,17 +72,17 @@ impl ResourcesStorageApi for Resources<'_> {
         }
     }
 
-    async fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
+    pub(crate) async fn get<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Persistable + Clone {
-        match &self.kind {
+        match &mut self.kind {
             ResourcesKind::Persistent(transaction) => transaction.get(id).await,
             ResourcesKind::Volatile(transaction) => transaction.get(id).await,
         }
     }
 
-    async fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
+    pub(crate) async fn list<R>(&mut self) -> PersistenceResult<HashMap<R::Id, R>>
     where R: Resource + Persistable + Clone {
-        match &self.kind {
+        match &mut self.kind {
             ResourcesKind::Persistent(transaction) => transaction.list().await,
             ResourcesKind::Volatile(transaction) => transaction.list().await,
         }

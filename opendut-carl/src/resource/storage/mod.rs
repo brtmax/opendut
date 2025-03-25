@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use url::Url;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 use diesel_async::AsyncPgConnection;
 use crate::resource::api::global::GlobalResourcesRef;
 use crate::resource::api::resources::{RelayedSubscriptionEvents, Resources};
@@ -37,7 +37,7 @@ impl ResourceStorage {
         Ok(storage)
     }
 
-    pub(super) async fn resources<T, F>(&self, global: GlobalResourcesRef, code: F) -> T
+    pub(super) async fn resources<T, F>(&mut self, global: GlobalResourcesRef, code: F) -> T
     where
         F: AsyncFnOnce(&mut Resources) -> T,
     {
@@ -78,7 +78,7 @@ impl ResourceStorage {
     where R: Resource {
         match self {
             ResourceStorage::Persistent(_) => unimplemented!(),
-            ResourceStorage::Volatile(storage) => storage.contains::<R>(id),
+            ResourceStorage::Volatile(storage) => storage.contains::<R>(id).await,
         }
     }
 
@@ -91,32 +91,17 @@ impl ResourceStorage {
 }
 
 
-pub struct Storage<'a> {
-    pub db: Db<'a>,
-    memory: Arc<Mutex<Memory>>,
-}
-
-impl Storage<'_> {
-    pub fn memory(&self) -> MutexGuard<Memory> {
-        self.memory.lock().unwrap()
-    }
-}
-
-#[derive(Clone)]
 pub struct Db<'a> {
-    pub inner: Arc<Mutex<&'a mut AsyncPgConnection>>, //Mutex rather than RwLock, because we share this between threads (i.e. we need it to implement `Sync`) //TODO still true?
+    pub connection: &'a mut AsyncPgConnection,
 }
 
 impl<'a> Db<'a> {
-    pub fn from_connection(connection: Arc<Mutex<&'a mut AsyncPgConnection>>) -> Db<'a> {
-        Self { inner: connection }
-    }
-    pub fn connection(&self) -> MutexGuard<&'a mut AsyncPgConnection> {
-        self.inner.lock().expect("error while locking mutex for database connection")
+    pub fn from_connection(connection: &'a mut AsyncPgConnection) -> Db<'a> {
+        Self { connection }
     }
 }
 
-pub type Memory = VolatileResourcesStorage;
+pub type Memory = Arc<Mutex<VolatileResourcesStorage>>;
 
 
 

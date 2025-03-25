@@ -2,7 +2,6 @@ use opendut_carl_api::carl::cluster::DeleteClusterConfigurationError;
 use opendut_types::cluster::{ClusterConfiguration, ClusterDeployment, ClusterId};
 use tracing::{debug, info};
 use crate::resource::api::resources::Resources;
-use crate::resource::storage::ResourcesStorageApi;
 
 pub struct DeleteClusterConfigurationParams {
     pub cluster_id: ClusterId,

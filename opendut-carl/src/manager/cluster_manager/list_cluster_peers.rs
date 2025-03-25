@@ -2,7 +2,6 @@ use opendut_types::cluster::{ClusterConfiguration, ClusterId};
 use opendut_types::peer::PeerDescriptor;
 use crate::resource::persistence::error::PersistenceError;
 use crate::resource::manager::ResourceManagerRef;
-use crate::resource::storage::ResourcesStorageApi;
 
 pub struct ListClusterPeersParams {
     pub resource_manager: ResourceManagerRef,

@@ -4,11 +4,10 @@ use opendut_types::topology::DeviceDescriptor;
 use std::collections::HashMap;
 use tracing::{debug, info};
 use crate::resource::api::resources::Resources;
-use crate::resource::storage::ResourcesStorageApi;
 
 impl Resources<'_> {
     #[tracing::instrument(skip_all, level="trace")]
-    pub async fn list_devices(&self) -> Result<Vec<DeviceDescriptor>, ListDevicesError> {
+    pub async fn list_devices(&mut self) -> Result<Vec<DeviceDescriptor>, ListDevicesError> {
 
         debug!("Querying all devices.");
 

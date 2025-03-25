@@ -2,7 +2,6 @@ use crate::settings::vpn::Vpn;
 use opendut_carl_api::carl::cluster::DeleteClusterDeploymentError;
 use opendut_types::cluster::{ClusterConfiguration, ClusterDeployment, ClusterId};
 use crate::resource::api::resources::Resources;
-use crate::resource::storage::ResourcesStorageApi;
 
 pub struct DeleteClusterDeploymentParams {
     pub cluster_id: ClusterId,

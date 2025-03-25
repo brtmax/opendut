@@ -1,7 +1,6 @@
 use opendut_types::resources::Id;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 
 use crate::resource::api::id::ResourceId;
 use crate::resource::api::resources::RelayedSubscriptionEvents;
@@ -13,18 +12,17 @@ use crate::resource::subscription::Subscribable;
 
 #[derive(Default)]
 pub struct VolatileResourcesStorageHandle {
-    memory: Arc<Mutex<Memory>>,
+    memory: Memory,
 }
 impl VolatileResourcesStorageHandle {
-    pub async fn resources<T, F>(&self, code: F) -> T
+    pub async fn resources<T, F>(&mut self, code: F) -> T
     where
         F: AsyncFnOnce(VolatileResourcesTransaction) -> T,
     {
-        let mut memory = self.memory.lock().unwrap();
         let mut relayed_subscription_events = RelayedSubscriptionEvents::default();
 
         let transaction = VolatileResourcesTransaction {
-            memory: &mut memory,
+            memory: &mut self.memory,
             relayed_subscription_events: &mut relayed_subscription_events,
         };
         let result = code(transaction).await;
@@ -39,11 +37,10 @@ impl VolatileResourcesStorageHandle {
         F: AsyncFnOnce(VolatileResourcesTransaction) -> Result<T, E>,
         E: Send + Sync + 'static,
     {
-        let mut memory = self.memory.lock().unwrap();
         let mut relayed_subscription_events = RelayedSubscriptionEvents::default();
 
         let transaction = VolatileResourcesTransaction {
-            memory: &mut memory,
+            memory: &mut self.memory,
             relayed_subscription_events: &mut relayed_subscription_events,
         };
         let result = code(transaction).await;
@@ -53,17 +50,17 @@ impl VolatileResourcesStorageHandle {
 
 #[derive(Default)]
 pub struct VolatileResourcesStorage {
-    storage: Mutex<HashMap<TypeId, HashMap<Id, Box<dyn Any + Send + Sync>>>>,
+    storage: HashMap<TypeId, HashMap<Id, Box<dyn Any + Send + Sync>>>,
 }
 
-impl ResourcesStorageApi for VolatileResourcesStorage {
+impl ResourcesStorageApi for Memory {
 
     async fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
     where R: Resource {
-        let mut storage = self.storage.lock().unwrap();
+        let mut memory = self.lock().unwrap();
 
         let id = id.into_id();
-        let column = storage
+        let column = memory.storage
             .entry(TypeId::of::<R>())
             .or_default();
         column.insert(id, Box::new(resource));
@@ -72,11 +69,11 @@ impl ResourcesStorageApi for VolatileResourcesStorage {
 
     async fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource {
-        let mut storage = self.storage.lock().unwrap();
+        let mut memory = self.lock().unwrap();
 
         let id = id.into_id();
         let type_id = TypeId::of::<R>();
-        match storage.get_mut(&TypeId::of::<R>()) {
+        match memory.storage.get_mut(&TypeId::of::<R>()) {
             None => Ok(None),
             Some(column) => {
                 let result = column.remove(&id)
@@ -86,7 +83,7 @@ impl ResourcesStorageApi for VolatileResourcesStorage {
                         .ok()
                     );
                 if column.is_empty() {
-                    storage.remove(&type_id);
+                    memory.storage.remove(&type_id);
                 }
                 Ok(result)
             }
@@ -95,11 +92,11 @@ impl ResourcesStorageApi for VolatileResourcesStorage {
 
     async fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Clone {
-        let storage = self.storage.lock().unwrap();
+        let memory = self.lock().unwrap();
 
         let id = id.into_id();
 
-        let result = storage.get(&TypeId::of::<R>())
+        let result = memory.storage.get(&TypeId::of::<R>())
             .and_then(|column| column.get(&id))
             .and_then(|resource| resource.downcast_ref().cloned());
         Ok(result)
@@ -107,9 +104,9 @@ impl ResourcesStorageApi for VolatileResourcesStorage {
 
     async fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
     where R: Resource {
-        let storage = self.storage.lock().unwrap();
+        let memory = self.lock().unwrap();
 
-        let result: HashMap<R::Id, R> = match storage.get(&TypeId::of::<R>()) {
+        let result: HashMap<R::Id, R> = match memory.storage.get(&TypeId::of::<R>()) {
             Some(column) => {
                 column.iter().map(|(value_id, value)| {
                     let resource = value
@@ -131,11 +128,10 @@ impl ResourcesStorageApi for VolatileResourcesStorage {
 impl VolatileResourcesStorageHandle {
     pub async fn contains<R>(&self, id: R::Id) -> bool
     where R: Resource {
-        let storage = self.memory.lock().unwrap();
-        let storage = storage.storage.lock().unwrap();
+        let memory = self.memory.lock().unwrap();
 
         let id = id.into_id();
-        if let Some(column) = storage.get(&TypeId::of::<R>()) {
+        if let Some(column) = memory.storage.get(&TypeId::of::<R>()) {
             column.contains_key(&id)
         }
         else {
@@ -144,7 +140,8 @@ impl VolatileResourcesStorageHandle {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.memory.lock().unwrap().storage.lock().unwrap().is_empty()
+        let memory = self.memory.lock().unwrap();
+        memory.storage.is_empty()
     }
 }
 

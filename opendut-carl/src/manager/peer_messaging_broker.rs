@@ -18,7 +18,6 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::resource::persistence::error::PersistenceError;
 use crate::resource::manager::ResourceManagerRef;
-use crate::resource::storage::ResourcesStorageApi;
 
 pub type PeerMessagingBrokerRef = Arc<PeerMessagingBroker>;
 
@@ -289,7 +288,6 @@ mod tests {
     use opendut_carl_api::proto::services::peer_messaging_broker::Ping;
     use super::*;
     use crate::resource::manager::ResourceManager;
-    use crate::resource::storage::ResourcesStorageApi;
 
     #[tokio::test]
     async fn peer_stream() -> anyhow::Result<()> {

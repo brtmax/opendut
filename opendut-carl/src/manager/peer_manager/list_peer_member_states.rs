@@ -1,7 +1,6 @@
 use crate::manager::cluster_manager;
 use crate::resource::api::resources::Resources;
 use crate::resource::persistence::error::PersistenceError;
-use crate::resource::storage::ResourcesStorageApi;
 use opendut_types::cluster::ClusterId;
 use opendut_types::peer::state::PeerMemberState;
 use opendut_types::peer::{PeerDescriptor, PeerId};
@@ -15,7 +14,7 @@ pub enum ListPeerMemberStatesError {
 }
 
 impl Resources<'_> {
-    pub async fn list_peer_member_states(&self) -> Result<HashMap<PeerId, PeerMemberState>, PersistenceError> {
+    pub async fn list_peer_member_states(&mut self) -> Result<HashMap<PeerId, PeerMemberState>, PersistenceError> {
         let deployed_clusters = cluster_manager::internal::list_deployed_clusters(self).await?;
         let deployed_devices = deployed_clusters.into_iter()
             .flat_map(|deployed_cluster| {

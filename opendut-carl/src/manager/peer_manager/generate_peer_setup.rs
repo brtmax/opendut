@@ -9,7 +9,6 @@ use pem::Pem;
 use tracing::{debug, error, info, warn};
 use url::Url;
 use crate::resource::api::resources::Resources;
-use crate::resource::storage::ResourcesStorageApi;
 
 pub struct GeneratePeerSetupParams {
     pub peer: PeerId,
@@ -36,7 +35,7 @@ pub enum GeneratePeerSetupError {
 
 impl Resources<'_> {
     #[tracing::instrument(skip_all, level="trace")]
-    pub async fn generate_peer_setup(&self, params: GeneratePeerSetupParams) -> Result<PeerSetup, GeneratePeerSetupError> {
+    pub async fn generate_peer_setup(&mut self, params: GeneratePeerSetupParams) -> Result<PeerSetup, GeneratePeerSetupError> {
 
         let peer_id = params.peer;
 

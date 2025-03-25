@@ -1,4 +1,3 @@
-use crate::resource::storage::ResourcesStorageApi;
 use crate::settings::vpn::Vpn;
 use opendut_auth::registration::client::RegistrationClientRef;
 use opendut_carl_api::carl::peer::DeletePeerDescriptorError;

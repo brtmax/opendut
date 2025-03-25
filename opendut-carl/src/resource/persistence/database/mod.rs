@@ -1,6 +1,6 @@
 use crate::resource::storage::DatabaseConnectInfo;
 use backon::Retryable;
-use diesel::{Connection as _, ConnectionError};
+use diesel::ConnectionError;
 use diesel_async::{AsyncConnection, AsyncPgConnection};
 use diesel_async::async_connection_wrapper::AsyncConnectionWrapper;
 use diesel_async::pooled_connection::{bb8, AsyncDieselConnectionManager};
@@ -107,9 +107,7 @@ pub enum ConnectError {
 pub mod testing {
     use crate::resource::api::global::GlobalResources;
     use crate::resource::manager::{ResourceManager, ResourceManagerRef};
-    use crate::resource::persistence::database;
     use crate::resource::storage::{DatabaseConnectInfo, Password, PersistenceOptions};
-    use diesel_async::{AsyncConnection, AsyncPgConnection};
     use testcontainers_modules::testcontainers::ContainerAsync;
     use testcontainers_modules::{postgres, testcontainers::runners::AsyncRunner};
     use url::Url;

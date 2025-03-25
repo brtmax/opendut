@@ -1,6 +1,5 @@
 use crate::resource::api::resources::Resources;
 use crate::resource::persistence::error::{PersistenceError, PersistenceResult};
-use crate::resource::storage::ResourcesStorageApi;
 use opendut_carl_api::carl::peer::ListPeerStatesError;
 use opendut_types::peer::state::{PeerConnectionState, PeerState};
 use opendut_types::peer::PeerId;
@@ -10,7 +9,7 @@ use tracing::debug;
 
 impl Resources<'_> {
     #[tracing::instrument(skip_all, level="trace")]
-    pub async fn list_peer_states(&self) -> Result<HashMap<PeerId, PeerState>, ListPeerStatesError> {
+    pub async fn list_peer_states(&mut self) -> Result<HashMap<PeerId, PeerState>, ListPeerStatesError> {
 
         debug!("Querying all peer states.");
         let peer_states = (async || {

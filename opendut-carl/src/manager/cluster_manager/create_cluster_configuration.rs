@@ -2,7 +2,6 @@ use opendut_types::cluster::{ClusterConfiguration, ClusterId};
 use tracing::{debug, info};
 use opendut_carl_api::carl::cluster::CreateClusterConfigurationError;
 use crate::resource::api::resources::Resources;
-use crate::resource::storage::ResourcesStorageApi;
 
 pub struct CreateClusterConfigurationParams {
     pub cluster_configuration: ClusterConfiguration,

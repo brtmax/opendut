@@ -3,7 +3,7 @@ use crate::resource::persistence::database::ConnectError;
 use crate::resource::persistence::error::{PersistenceError, PersistenceResult};
 use crate::resource::persistence::resources::Persistable;
 use crate::resource::storage::volatile::VolatileResourcesStorage;
-use crate::resource::storage::{DatabaseConnectInfo, Db, Memory, Resource, ResourcesStorageApi, Storage};
+use crate::resource::storage::{DatabaseConnectInfo, Db, Memory, Resource};
 use diesel_async::pooled_connection::bb8::Pool;
 use diesel_async::{AsyncConnection, AsyncPgConnection};
 use std::any::Any;
@@ -28,12 +28,12 @@ impl PersistentResourcesStorage {
         F: AsyncFnOnce(PersistentResourcesTransaction) -> T,
     {
         let mut connection = self.db_connection_pool.get().await
-            .expect("Could not retrieve connection from connection pool."); //FIXME proper error handling
+            .expect("Could not retrieve connection handle from connection pool."); //FIXME proper error handling
 
         let mut relayed_subscription_events = RelayedSubscriptionEvents::default();
 
         let transaction = PersistentResourcesTransaction {
-            db_connection: Db::from_connection(Arc::new(Mutex::new(&mut connection))),
+            db: Db::from_connection(&mut connection),
             memory: self.memory.clone(),
             relayed_subscription_events: &mut relayed_subscription_events,
         };
@@ -53,23 +53,22 @@ impl PersistentResourcesStorage {
     {
         let mut connection = self.db_connection_pool.get().await?;
 
-        let transaction_result = {
+        let transaction_result =
             connection.transaction::<_, TransactionPassthroughError, _>(|connection| Box::pin(async {
                 let mut relayed_subscription_events = RelayedSubscriptionEvents::default();
 
                 let transaction = PersistentResourcesTransaction {
-                    db_connection: Db::from_connection(Arc::new(Mutex::new(connection))),
+                    db: Db::from_connection(connection),
                     memory: self.memory.clone(),
                     relayed_subscription_events: &mut relayed_subscription_events,
                 };
 
-                let result = code(transaction).await;
+                let result = code(transaction).await; //FIXME
                 match result {
                     Ok(ok) => Ok((ok, relayed_subscription_events)),
                     Err(error) => Err(TransactionPassthroughError::Passthrough(Box::new(error))), //passthrough via an Err-value to trigger transaction rollback
                 }
-            }))
-        };
+            }));
 
         let transaction_result = transaction_result.await;
 
@@ -84,85 +83,36 @@ impl PersistentResourcesStorage {
         }
     }
 }
-// impl ResourcesStorageApi for PersistentResourcesStorage { //TODO remove?
-//     async fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
-//     where R: Resource + Persistable {
-//         let mut db = self.db_connection_pool.get().await?;
-//         let db = Db::from_connection(&mut db);
-//         let mut storage = Storage { db, memory: &mut self.memory.lock().unwrap() };
-//         resource.insert(id, &mut storage).await
-//     }
-// 
-//     async fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
-//     where R: Resource + Persistable {
-//         let mut db = self.db_connection_pool.get().await?;
-//         let db = Db::from_connection(&mut db);
-//         let mut storage = Storage { db, memory: &mut self.memory.lock().unwrap() };
-//         R::remove(id, &mut storage).await
-//     }
-// 
-//     async fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
-//     where R: Resource + Persistable + Clone {
-//         let mut db = self.db_connection_pool.get().await?;
-//         let db = Db::from_connection(&mut db);
-//         let storage = Storage { db, memory: &mut self.memory.lock().unwrap() };
-//         R::get(id, &storage).await
-//     }
-// 
-//     async fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
-//     where R: Resource + Persistable + Clone {
-//         let mut db = self.db_connection_pool.get().await?;
-//         let db = Db::from_connection(&mut db);
-//         let storage = Storage { db, memory: &mut self.memory.lock().unwrap() };
-//         R::list(&storage).await
-//     }
-// }
 
 
 pub struct PersistentResourcesTransaction<'transaction> {
-    db_connection: Db<'transaction>,
-    memory: Arc<Mutex<Memory>>,
+    db: Db<'transaction>,
+    memory: Memory,
     pub relayed_subscription_events: &'transaction mut RelayedSubscriptionEvents,
 }
-impl ResourcesStorageApi for PersistentResourcesTransaction<'_> {
-    async fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
+impl PersistentResourcesTransaction<'_> {
+    pub(crate) async fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
     where R: Resource + Persistable {
-        let mut storage = Storage {
-            db: self.db_connection.clone(),
-            memory: self.memory.clone(),
-        };
-        resource.insert(id, &mut storage).await
+        resource.insert(id, &mut self.memory, &mut self.db).await
     }
 
-    async fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
+    pub(crate) async fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Persistable {
-        let mut storage = Storage {
-            db: self.db_connection.clone(),
-            memory: self.memory.clone(),
-        };
-        R::remove(id, &mut storage).await
+        R::remove(id, &mut self.memory, &mut self.db).await
     }
 
-    async fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
+    pub(crate) async fn get<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
     where
         R: Resource + Persistable + Clone
     {
-        let storage = Storage {
-            db: self.db_connection.clone(),
-            memory: self.memory.clone(),
-        };
-        R::get(id, &storage).await
+        R::get(id, &self.memory, &mut self.db).await
     }
 
-    async fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
+    pub(crate) async fn list<R>(&mut self) -> PersistenceResult<HashMap<R::Id, R>>
     where
         R: Resource + Persistable + Clone
     {
-        let storage = Storage {
-            db: self.db_connection.clone(),
-            memory: self.memory.clone(),
-        };
-        R::list(&storage).await
+        R::list(&self.memory, &mut self.db).await
     }
 }
 

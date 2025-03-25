@@ -5,7 +5,7 @@ use crate::resource::api::resources::{RelayedSubscriptionEvents, Resources};
 use crate::resource::api::Resource;
 use crate::resource::persistence::error::PersistenceResult;
 use crate::resource::persistence::resources::Persistable;
-use crate::resource::storage::{self, PersistenceOptions, ResourceStorage, ResourcesStorageApi};
+use crate::resource::storage::{self, PersistenceOptions, ResourceStorage};
 use crate::resource::subscription::{ResourceSubscriptionChannels, Subscribable, Subscription};
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockWriteGuard};
@@ -35,7 +35,7 @@ impl ResourceManager {
         }))
     }
 
-    pub async fn insert<R>(&self, id: R::Id, resource: R) -> PersistenceResult<()>
+    pub(crate) async fn insert<R>(&self, id: R::Id, resource: R) -> PersistenceResult<()>
     where R: Resource + Persistable + Subscribable {
         let mut state = self.state.write().await;
 
@@ -46,7 +46,8 @@ impl ResourceManager {
         result
     }
 
-    pub async fn remove<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
+    #[allow(unused)]
+    pub(crate) async fn remove<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Persistable {
         let mut state = self.state.write().await;
         let (result, relayed_subscription_events) = state.storage.resources_mut(self.global.clone(), async move |transaction| {
@@ -56,23 +57,23 @@ impl ResourceManager {
         result
     }
 
-    pub async fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
+    pub(crate) async fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Persistable + Clone {
-        let state = self.state.read().await;
+        let mut state = self.state.write().await;
         state.storage.resources(self.global.clone(), async |resources| resources.get(id).await).await
     }
 
-    pub async fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
+    pub(crate) async fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
     where R: Resource + Persistable + Clone {
-        let state = self.state.read().await;
+        let mut state = self.state.write().await;
         state.storage.resources(self.global.clone(), async |resources| resources.list().await).await
     }
 
     pub async fn resources<F, T>(&self, f: F) -> T
     where
-        F: AsyncFnOnce(&Resources) -> T,
+        F: AsyncFnOnce(&mut Resources) -> T,
     {
-        let state = self.state.read().await;
+        let mut state = self.state.write().await;
         state.storage.resources(self.global.clone(), async move |transaction| {
             f(transaction).await
         }).await

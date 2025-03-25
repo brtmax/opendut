@@ -1,5 +1,4 @@
 use crate::resource::manager::ResourceManagerRef;
-use crate::resource::storage::ResourcesStorageApi;
 use opendut_carl_api::carl::peer::GetPeerStateError;
 use opendut_types::peer::state::{PeerConnectionState, PeerState};
 use opendut_types::peer::PeerId;

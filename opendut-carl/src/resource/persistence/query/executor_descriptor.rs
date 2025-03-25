@@ -1,4 +1,4 @@
-use diesel::{Connection, ExpressionMethods, QueryDsl, SelectableHelper};
+use diesel::{ExpressionMethods, QueryDsl, SelectableHelper};
 use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
 use opendut_types::peer::executor::container::{ContainerCommand, ContainerCommandArgument, ContainerDevice, ContainerEnvironmentVariable, ContainerImage, ContainerName, ContainerPortSpec, ContainerVolume};
 use opendut_types::peer::executor::{ExecutorDescriptor, ExecutorId, ExecutorKind, ResultsUrl};

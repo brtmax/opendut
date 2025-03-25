@@ -19,7 +19,6 @@ use crate::manager::peer_messaging_broker::PeerMessagingBrokerRef;
 use crate::manager::cluster_manager;
 use crate::resource::manager::{ResourceManagerRef, SubscriptionEvent};
 use crate::resource::persistence::error::PersistenceResult;
-use crate::resource::storage::ResourcesStorageApi;
 use crate::settings::vpn::Vpn;
 
 pub mod create_cluster_configuration;

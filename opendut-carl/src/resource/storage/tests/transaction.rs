@@ -1,7 +1,6 @@
 use crate::resource::persistence;
 use crate::resource::persistence::error::PersistenceError;
 use crate::resource::storage::tests::peer_descriptor::peer_descriptor;
-use crate::resource::storage::ResourcesStorageApi;
 use googletest::prelude::*;
 use opendut_types::cluster::{ClusterDeployment, ClusterId};
 use opendut_types::peer::PeerDescriptor;
