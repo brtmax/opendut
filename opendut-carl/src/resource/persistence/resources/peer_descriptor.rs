@@ -112,7 +112,7 @@ impl Persistable for PeerDescriptor {
 const PEER_DESCRIPTOR_TABLE: TableDefinition<&[u8], String> = TableDefinition::new("peer_descriptor");
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-struct SerializablePeerDescriptor {
+struct SerializablePeerDescriptor { //TODO From-implementation //TODO version-field, if nothing exists natively in redb
     pub id: PeerId,
     pub name: PeerName,
     pub location: Option<PeerLocation>,
@@ -123,7 +123,7 @@ struct SerializablePeerDescriptor {
 
 
 #[cfg(test)]
-mod tests {
+mod tests { //TODO remove?
     use opendut_types::peer::executor::{ExecutorDescriptor, ExecutorId, ExecutorKind, ResultsUrl};
     use opendut_types::peer::executor::container::{ContainerCommand, ContainerCommandArgument, ContainerDevice, ContainerEnvironmentVariable, ContainerImage, ContainerName, ContainerPortSpec, ContainerVolume, Engine};
     use opendut_types::topology::{DeviceDescription, DeviceDescriptor, DeviceId, DeviceName, DeviceTag};
@@ -231,5 +231,4 @@ mod tests {
             },
         })
     }
-
 }
