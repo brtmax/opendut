@@ -1,37 +1,17 @@
 use super::Persistable;
 use crate::resource::persistence::error::PersistenceResult;
-use crate::resource::persistence::query::Filter;
-use crate::resource::persistence::{query, Storage, Storage2};
-use opendut_types::peer::{PeerDescriptor, PeerId, PeerLocation, PeerName, PeerNetworkDescriptor};
-use redb::{ReadableTable, TableDefinition};
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+use crate::resource::persistence::Storage;
 use opendut_types::peer::executor::ExecutorDescriptors;
+use opendut_types::peer::{PeerDescriptor, PeerId, PeerLocation, PeerName, PeerNetworkDescriptor};
 use opendut_types::topology::Topology;
+use redb::{ReadableTable, TableDefinition};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use uuid::Uuid;
 
 impl Persistable for PeerDescriptor {
-    fn insert(self, _peer_id: PeerId, storage: &mut Storage) -> PersistenceResult<()> {
-        let mut connection = storage.db.connection();
 
-        query::peer_descriptor::insert(self, &mut connection)
-    }
-
-    fn remove(peer_id: PeerId, storage: &mut Storage) -> PersistenceResult<Option<Self>> {
-        query::peer_descriptor::remove(peer_id, &mut storage.db.connection())
-    }
-
-    fn get(peer_id: PeerId, storage: &Storage) -> PersistenceResult<Option<Self>> {
-        let result = query::peer_descriptor::list(Filter::By(peer_id), &mut storage.db.connection())?.values().next().cloned();
-        Ok(result)
-    }
-
-    fn list(storage: &Storage) -> PersistenceResult<HashMap<Self::Id, Self>> {
-        query::peer_descriptor::list(Filter::Not, &mut storage.db.connection())
-    }
-
-
-    fn insert2(self, peer_id: PeerId, storage: &mut Storage2) -> PersistenceResult<()> {
+    fn insert(self, peer_id: PeerId, storage: &mut Storage) -> PersistenceResult<()> {
         let mut table = storage.db.open_table(PEER_DESCRIPTOR_TABLE).unwrap(); //TODO don't unwrap
 
         let key = peer_id.uuid.as_bytes().as_slice();
@@ -49,7 +29,7 @@ impl Persistable for PeerDescriptor {
         Ok(())
     }
 
-    fn remove2(peer_id: PeerId, storage: &mut Storage2) -> PersistenceResult<Option<Self>> {
+    fn remove(peer_id: PeerId, storage: &mut Storage) -> PersistenceResult<Option<Self>> {
         let mut table = storage.db.open_table(PEER_DESCRIPTOR_TABLE).unwrap(); //TODO don't unwrap
 
         let key = peer_id.uuid.as_bytes().as_slice();
@@ -68,7 +48,7 @@ impl Persistable for PeerDescriptor {
         Ok(value)
     }
 
-    fn get2(peer_id: PeerId, storage: &Storage2) -> PersistenceResult<Option<Self>> {
+    fn get(peer_id: PeerId, storage: &Storage) -> PersistenceResult<Option<Self>> {
         let table = storage.db.open_table(PEER_DESCRIPTOR_TABLE).unwrap(); //TODO don't unwrap
 
         let key = peer_id.uuid.as_bytes().as_slice();
@@ -87,7 +67,7 @@ impl Persistable for PeerDescriptor {
         Ok(value)
     }
 
-    fn list2(storage: &Storage2) -> PersistenceResult<HashMap<Self::Id, Self>> {
+    fn list(storage: &Storage) -> PersistenceResult<HashMap<Self::Id, Self>> {
         let table = storage.db.open_table(PEER_DESCRIPTOR_TABLE).unwrap(); //TODO don't unwrap
 
         let value = table.iter().unwrap() //TODO don't unwrap
@@ -123,12 +103,13 @@ struct SerializablePeerDescriptor { //TODO From-implementation //TODO version-fi
 
 
 #[cfg(test)]
-mod tests { //TODO remove?
-    use opendut_types::peer::executor::{ExecutorDescriptor, ExecutorId, ExecutorKind, ResultsUrl};
+mod tests {
+    use super::*;
     use opendut_types::peer::executor::container::{ContainerCommand, ContainerCommandArgument, ContainerDevice, ContainerEnvironmentVariable, ContainerImage, ContainerName, ContainerPortSpec, ContainerVolume, Engine};
+    //TODO remove?
+        use opendut_types::peer::executor::{ExecutorDescriptor, ExecutorId, ExecutorKind, ResultsUrl};
     use opendut_types::topology::{DeviceDescription, DeviceDescriptor, DeviceId, DeviceName, DeviceTag};
     use opendut_types::util::net::{CanSamplePoint, NetworkInterfaceConfiguration, NetworkInterfaceDescriptor, NetworkInterfaceId, NetworkInterfaceName};
-    use super::*;
 
     #[test]
     fn peer_descriptor_should_be_serializable() -> anyhow::Result<()> {

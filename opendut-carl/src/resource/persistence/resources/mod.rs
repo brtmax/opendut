@@ -1,6 +1,6 @@
 use crate::resource::api::Resource;
 use crate::resource::persistence::error::PersistenceResult;
-use crate::resource::persistence::{Storage, Storage2};
+use crate::resource::persistence::Storage;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
@@ -19,13 +19,4 @@ pub trait Persistable: Send + Sync + Sized + Debug + Resource {
     fn get(id: Self::Id, storage: &Storage) -> PersistenceResult<Option<Self>>;
 
     fn list(storage: &Storage) -> PersistenceResult<HashMap<Self::Id, Self>>;
-
-
-    fn insert2(self, id: Self::Id, storage: &mut Storage2) -> PersistenceResult<()>;
-
-    fn remove2(id: Self::Id, storage: &mut Storage2) -> PersistenceResult<Option<Self>>;
-
-    fn get2(id: Self::Id, storage: &Storage2) -> PersistenceResult<Option<Self>>;
-
-    fn list2(storage: &Storage2) -> PersistenceResult<HashMap<Self::Id, Self>>;
 }

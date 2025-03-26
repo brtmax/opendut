@@ -1,34 +1,14 @@
 use super::Persistable;
 use crate::resource::persistence::error::PersistenceResult;
 use crate::resource::persistence::query::Filter;
-use crate::resource::persistence::{query, Storage, Storage2};
+use crate::resource::persistence::{query, Storage};
 use opendut_types::cluster::{ClusterConfiguration, ClusterId};
 use std::collections::HashMap;
 use redb::{ReadableTable, TableDefinition};
 use uuid::Uuid;
 
 impl Persistable for ClusterConfiguration {
-    fn insert(self, _id: ClusterId, storage: &mut Storage) -> PersistenceResult<()> {
-        let mut connection = storage.db.connection();
-
-        query::cluster_configuration::insert(self, &mut connection)
-    }
-
-    fn remove(cluster_id: ClusterId, storage: &mut Storage) -> PersistenceResult<Option<Self>> {
-        query::cluster_configuration::remove(cluster_id, &mut storage.db.connection())
-    }
-
-    fn get(cluster_id: ClusterId, storage: &Storage) -> PersistenceResult<Option<Self>> {
-        let result = query::cluster_configuration::list(Filter::By(cluster_id), &mut storage.db.connection())?.values().next().cloned();
-        Ok(result)
-    }
-
-    fn list(storage: &Storage) -> PersistenceResult<HashMap<Self::Id, Self>> {
-        query::cluster_configuration::list(Filter::Not, &mut storage.db.connection())
-    }
-
-
-    fn insert2(self, cluster_id: ClusterId, storage: &mut Storage2) -> PersistenceResult<()> {
+    fn insert(self, cluster_id: ClusterId, storage: &mut Storage) -> PersistenceResult<()> {
         let mut table = storage.db.open_table(CLUSTER_CONFIGURATION_TABLE).unwrap(); //TODO don't unwrap
 
         let key = cluster_id.0.as_bytes().as_slice();
@@ -47,7 +27,7 @@ impl Persistable for ClusterConfiguration {
         Ok(())
     }
 
-    fn remove2(cluster_id: ClusterId, storage: &mut Storage2) -> PersistenceResult<Option<Self>> {
+    fn remove(cluster_id: ClusterId, storage: &mut Storage) -> PersistenceResult<Option<Self>> {
         let mut table = storage.db.open_table(CLUSTER_CONFIGURATION_TABLE).unwrap(); //TODO don't unwrap
 
         let key = cluster_id.0.as_bytes().as_slice();
@@ -66,7 +46,7 @@ impl Persistable for ClusterConfiguration {
         Ok(value)
     }
 
-    fn get2(cluster_id: ClusterId, storage: &Storage2) -> PersistenceResult<Option<Self>> {
+    fn get(cluster_id: ClusterId, storage: &Storage) -> PersistenceResult<Option<Self>> {
         let table = storage.db.open_table(CLUSTER_CONFIGURATION_TABLE).unwrap(); //TODO don't unwrap
 
         let key = cluster_id.0.as_bytes().as_slice();
@@ -85,7 +65,7 @@ impl Persistable for ClusterConfiguration {
         Ok(value)
     }
 
-    fn list2(storage: &Storage2) -> PersistenceResult<HashMap<Self::Id, Self>> {
+    fn list(storage: &Storage) -> PersistenceResult<HashMap<Self::Id, Self>> {
         let table = storage.db.open_table(CLUSTER_CONFIGURATION_TABLE).unwrap(); //TODO don't unwrap
 
         let value = table.iter().unwrap() //TODO don't unwrap

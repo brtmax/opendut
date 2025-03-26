@@ -8,10 +8,6 @@ pub(crate) mod resources;
 mod query;
 
 pub struct Storage<'a> {
-    pub db: Db<'a>,
-    pub memory: &'a mut Memory,
-}
-pub struct Storage2<'a> {
     pub db: &'a mut redb::WriteTransaction,
     pub memory: Arc<Mutex<Memory>>,
 }
