@@ -1,32 +1,32 @@
 use crate::resource::api::resources::RelayedSubscriptionEvents;
 use crate::resource::persistence::database::ConnectError;
-use crate::resource::persistence::error::{PersistenceError, PersistenceResult};
+use crate::resource::persistence::error::PersistenceResult;
 use crate::resource::persistence::resources::Persistable;
-use crate::resource::persistence::{Db, Storage};
+use crate::resource::persistence::Storage;
 use crate::resource::storage::volatile::VolatileResourcesStorage;
 use crate::resource::storage::{DatabaseConnectInfo, Resource, ResourcesStorageApi};
-use diesel::{Connection, PgConnection};
 use std::any::Any;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tracing::debug;
 
 pub struct PersistentResourcesStorage {
-    db_connection: redb::Database,
+    db: redb::Database,
     memory: Arc<Mutex<VolatileResourcesStorage>>,
 }
 impl PersistentResourcesStorage {
     pub async fn connect(database_connect_info: &DatabaseConnectInfo) -> Result<Self, ConnectError> {
         let _ = crate::resource::persistence::database::connect(database_connect_info).await?; //TODO remove or use for migration
 
-        let file = "/opt/opendut-carl/config/opendut.redb";
-        let db_connection = redb::Database::create(file).unwrap(); //FIXME //TODO don't unwrap //TODO make name configurable and set it to a temporary path during tests
-        debug!("Database file opened from: {file}");
+        let file = database_connect_info.file.clone();
+
+        let db = redb::Database::create(&file).unwrap(); //TODO don't unwrap
+        debug!("Database file opened from: {file:?}");
 
         let memory = VolatileResourcesStorage::default();
         let memory = Arc::new(Mutex::new(memory));
 
-        Ok(Self { db_connection, memory })
+        Ok(Self { db, memory })
     }
 
     pub async fn resources<T, F>(&self, code: F) -> T
@@ -35,10 +35,10 @@ impl PersistentResourcesStorage {
     {
         let mut relayed_subscription_events = RelayedSubscriptionEvents::default();
 
-        let mut transaction = self.db_connection.begin_write().unwrap(); //TODO don't unwrap //TODO don't begin_write(), but rather begin_read() ?
+        let mut transaction = self.db.begin_write().unwrap(); //TODO don't unwrap //TODO don't begin_write(), but rather begin_read() ?
         let result = {
             let transaction = PersistentResourcesTransaction {
-                db_connection: Mutex::new(&mut transaction), //TODO don't unwrap
+                db: Mutex::new(&mut transaction), //TODO don't unwrap
                 memory: self.memory.clone(),
                 relayed_subscription_events: &mut relayed_subscription_events,
             };
@@ -58,10 +58,10 @@ impl PersistentResourcesStorage {
         E: Send + Sync + 'static,
     {
         let mut relayed_subscription_events = RelayedSubscriptionEvents::default();
-        let mut transaction = self.db_connection.begin_write().unwrap(); //TODO don't unwrap
+        let mut transaction = self.db.begin_write().unwrap(); //TODO don't unwrap
         let result = {
             let persistent_transaction = PersistentResourcesTransaction {
-                db_connection: Mutex::new(&mut transaction),
+                db: Mutex::new(&mut transaction),
                 memory: self.memory.clone(),
                 relayed_subscription_events: &mut relayed_subscription_events,
             };
@@ -77,7 +77,7 @@ impl PersistentResourcesStorage {
 impl ResourcesStorageApi for PersistentResourcesStorage {
     fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
     where R: Resource + Persistable {
-        let mut transaction = self.db_connection.begin_write().unwrap(); //TODO don't unwrap
+        let mut transaction = self.db.begin_write().unwrap(); //TODO don't unwrap
         let mut storage = Storage {
             db: &mut transaction,
             memory: self.memory.clone(),
@@ -89,7 +89,7 @@ impl ResourcesStorageApi for PersistentResourcesStorage {
 
     fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Persistable {
-        let mut transaction = self.db_connection.begin_write().unwrap(); //TODO don't unwrap
+        let mut transaction = self.db.begin_write().unwrap(); //TODO don't unwrap
         let mut storage = Storage {
             db: &mut transaction,
             memory: self.memory.clone(),
@@ -102,7 +102,7 @@ impl ResourcesStorageApi for PersistentResourcesStorage {
     fn get<R>(&self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Persistable + Clone {
         let storage = Storage {
-            db: &mut self.db_connection.begin_write().unwrap(), //TODO don't unwrap //TODO begin_read()
+            db: &mut self.db.begin_write().unwrap(), //TODO don't unwrap //TODO begin_read()
             memory: self.memory.clone(),
         };
         R::get(id, &storage)
@@ -111,7 +111,7 @@ impl ResourcesStorageApi for PersistentResourcesStorage {
     fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
     where R: Resource + Persistable + Clone {
         let storage = Storage {
-            db: &mut self.db_connection.begin_write().unwrap(), //TODO don't unwrap //TODO begin_read()
+            db: &mut self.db.begin_write().unwrap(), //TODO don't unwrap //TODO begin_read()
             memory: self.memory.clone(),
         };
         R::list(&storage)
@@ -119,7 +119,7 @@ impl ResourcesStorageApi for PersistentResourcesStorage {
 }
 
 pub struct PersistentResourcesTransaction<'transaction> {
-    db_connection: Mutex<&'transaction mut redb::WriteTransaction>,
+    db: Mutex<&'transaction mut redb::WriteTransaction>,
     memory: Arc<Mutex<VolatileResourcesStorage>>,
     pub relayed_subscription_events: &'transaction mut RelayedSubscriptionEvents,
 }
@@ -127,7 +127,7 @@ impl PersistentResourcesTransaction<'_> {
     pub(crate) fn insert<R>(&mut self, id: R::Id, resource: R) -> PersistenceResult<()>
     where R: Resource + Persistable {
         let mut storage = Storage {
-            db: &mut self.db_connection.lock().unwrap(),
+            db: &mut self.db.lock().unwrap(),
             memory: self.memory.clone(),
         };
         resource.insert(id, &mut storage)
@@ -136,7 +136,7 @@ impl PersistentResourcesTransaction<'_> {
     pub(crate) fn remove<R>(&mut self, id: R::Id) -> PersistenceResult<Option<R>>
     where R: Resource + Persistable {
         let mut storage = Storage {
-            db: &mut self.db_connection.lock().unwrap(),
+            db: &mut self.db.lock().unwrap(),
             memory: self.memory.clone(),
         };
         R::remove(id, &mut storage)
@@ -146,22 +146,22 @@ impl PersistentResourcesTransaction<'_> {
     where
         R: Resource + Persistable + Clone
     {
-        let mut storage = Storage {
-            db: &mut self.db_connection.lock().unwrap(),
+        let storage = Storage {
+            db: &mut self.db.lock().unwrap(),
             memory: self.memory.clone(),
         };
-        R::get(id, &mut storage)
+        R::get(id, &storage)
     }
 
     pub(crate) fn list<R>(&self) -> PersistenceResult<HashMap<R::Id, R>>
     where
         R: Resource + Persistable + Clone
     {
-        let mut storage = Storage {
-            db: &mut self.db_connection.lock().unwrap(),
+        let storage = Storage {
+            db: &mut self.db.lock().unwrap(),
             memory: self.memory.clone(),
         };
-        R::list(&mut storage)
+        R::list(&storage)
     }
 }
 

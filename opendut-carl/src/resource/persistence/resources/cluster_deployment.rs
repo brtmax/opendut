@@ -3,8 +3,7 @@ use std::collections::HashMap;
 use redb::{ReadableTable, TableDefinition};
 use uuid::Uuid;
 use crate::resource::persistence::error::PersistenceResult;
-use crate::resource::persistence::query::Filter;
-use crate::resource::persistence::{query, Storage};
+use crate::resource::persistence::Storage;
 
 use super::Persistable;
 

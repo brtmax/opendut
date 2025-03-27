@@ -38,11 +38,8 @@ impl Persistable for PeerDescriptor {
             .map(|value| {
                 let peer_descriptor = serde_json::from_str::<SerializablePeerDescriptor>(&value.value()).unwrap(); //TODO don't unwrap
 
-                let peer_descriptor = {
-                    let SerializablePeerDescriptor { id, name, location, network, topology, executors } = peer_descriptor;
-                    PeerDescriptor { id, name, location, network, topology, executors }
-                };
-                peer_descriptor
+                let SerializablePeerDescriptor { id, name, location, network, topology, executors } = peer_descriptor;
+                PeerDescriptor { id, name, location, network, topology, executors }
             });
 
         Ok(value)
@@ -57,11 +54,8 @@ impl Persistable for PeerDescriptor {
             .map(|value| {
                 let peer_descriptor = serde_json::from_str::<SerializablePeerDescriptor>(&value.value()).unwrap(); //TODO don't unwrap
 
-                let peer_descriptor = {
-                    let SerializablePeerDescriptor { id, name, location, network, topology, executors } = peer_descriptor;
-                    PeerDescriptor { id, name, location, network, topology, executors }
-                };
-                peer_descriptor
+                let SerializablePeerDescriptor { id, name, location, network, topology, executors } = peer_descriptor;
+                PeerDescriptor { id, name, location, network, topology, executors }
             });
 
         Ok(value)

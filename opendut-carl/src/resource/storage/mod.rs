@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
+use anyhow::anyhow;
 use url::Url;
 use crate::resource::api::global::GlobalResourcesRef;
 use crate::resource::api::resources::{RelayedSubscriptionEvents, Resources};
@@ -105,6 +107,18 @@ impl PersistenceOptions {
         let persistence_enabled = config.get_bool("persistence.enabled")?;
 
         if persistence_enabled {
+            let file = {
+                let field = "persistence.database.file";
+                let value = config.get_string(field)
+                    .map_err(|cause| LoadError::ReadField { field, source: Box::new(cause) })?;
+
+                let path = PathBuf::from(&value);
+                if path.is_relative() {
+                    return Err(LoadError::ParseValue { field, value, source: anyhow!("Path to the database file should be absolute!").into() });
+                }
+                path
+            };
+
             let url = {
                 let field = "persistence.database.url";
                 let value = config.get_string(field)
@@ -129,6 +143,7 @@ impl PersistenceOptions {
 
             Ok(PersistenceOptions::Enabled {
                 database_connect_info: DatabaseConnectInfo {
+                    file,
                     url,
                     username,
                     password,
@@ -141,8 +156,13 @@ impl PersistenceOptions {
 }
 #[derive(Clone)]
 pub struct DatabaseConnectInfo {
+    pub file: PathBuf,
+
+    /// Deprecated
     pub url: Url,
+    /// Deprecated
     pub username: String,
+    /// Deprecated
     pub password: Password,
 }
 ///Wrapper for String without Debug and Display
