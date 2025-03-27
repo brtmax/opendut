@@ -1,6 +1,6 @@
 use super::Persistable;
 use crate::resource::persistence::error::PersistenceResult;
-use crate::resource::persistence::Storage;
+use crate::resource::persistence::{Db, DbMut, Memory};
 use opendut_types::peer::executor::ExecutorDescriptors;
 use opendut_types::peer::{PeerDescriptor, PeerId, PeerLocation, PeerName, PeerNetworkDescriptor};
 use opendut_types::topology::Topology;
@@ -11,8 +11,8 @@ use uuid::Uuid;
 
 impl Persistable for PeerDescriptor {
 
-    fn insert(self, peer_id: PeerId, storage: &mut Storage) -> PersistenceResult<()> {
-        let mut table = storage.db.open_table(PEER_DESCRIPTOR_TABLE).unwrap(); //TODO don't unwrap
+    fn insert(self, peer_id: PeerId, _: &mut Memory, db: DbMut) -> PersistenceResult<()> {
+        let mut table = db.open_table(PEER_DESCRIPTOR_TABLE).unwrap(); //TODO don't unwrap
 
         let key = peer_id.uuid.as_bytes().as_slice();
 
@@ -29,8 +29,8 @@ impl Persistable for PeerDescriptor {
         Ok(())
     }
 
-    fn remove(peer_id: PeerId, storage: &mut Storage) -> PersistenceResult<Option<Self>> {
-        let mut table = storage.db.open_table(PEER_DESCRIPTOR_TABLE).unwrap(); //TODO don't unwrap
+    fn remove(peer_id: PeerId, _: &mut Memory, db: DbMut) -> PersistenceResult<Option<Self>> {
+        let mut table = db.open_table(PEER_DESCRIPTOR_TABLE).unwrap(); //TODO don't unwrap
 
         let key = peer_id.uuid.as_bytes().as_slice();
 
@@ -45,8 +45,8 @@ impl Persistable for PeerDescriptor {
         Ok(value)
     }
 
-    fn get(peer_id: PeerId, storage: &Storage) -> PersistenceResult<Option<Self>> {
-        let table = storage.db.open_table(PEER_DESCRIPTOR_TABLE).unwrap(); //TODO don't unwrap
+    fn get(peer_id: PeerId, _: &Memory, db: Db) -> PersistenceResult<Option<Self>> {
+        let table = db.open_table(PEER_DESCRIPTOR_TABLE).unwrap(); //TODO don't unwrap
 
         let key = peer_id.uuid.as_bytes().as_slice();
 
@@ -61,8 +61,8 @@ impl Persistable for PeerDescriptor {
         Ok(value)
     }
 
-    fn list(storage: &Storage) -> PersistenceResult<HashMap<Self::Id, Self>> {
-        let table = storage.db.open_table(PEER_DESCRIPTOR_TABLE).unwrap(); //TODO don't unwrap
+    fn list(_: &Memory, db: Db) -> PersistenceResult<HashMap<Self::Id, Self>> {
+        let table = db.open_table(PEER_DESCRIPTOR_TABLE).unwrap(); //TODO don't unwrap
 
         let value = table.iter().unwrap() //TODO don't unwrap
             .map(|value| {

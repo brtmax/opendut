@@ -2,27 +2,29 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::resource::storage::volatile::VolatileResourcesStorage;
 use diesel::PgConnection;
+use redb::TableHandle;
 
 pub mod database;
 pub(crate) mod resources;
 mod query;
 
-pub struct Storage<'a> {
-    pub db: &'a mut redb::WriteTransaction,
-    pub memory: Arc<Mutex<Memory>>,
-}
-pub struct Db<'a> {
+pub type Memory = Arc<Mutex<VolatileResourcesStorage>>;
+
+pub type Db<'transaction> = &'transaction redb::ReadTransaction;
+pub type DbMut<'transaction> = &'transaction mut redb::WriteTransaction;
+
+
+pub struct PostgresDb<'a> {
     pub inner: Mutex<&'a mut PgConnection>, //Mutex rather than RwLock, because we share this between threads (i.e. we need it to implement `Sync`)
 }
-impl<'a> Db<'a> {
-    pub fn from_connection(connection: &'a mut PgConnection) -> Db<'a> {
+impl<'a> PostgresDb<'a> {
+    pub fn from_connection(connection: &'a mut PgConnection) -> PostgresDb<'a> {
         Self { inner: Mutex::new(connection) }
     }
     pub fn connection(&self) -> MutexGuard<&'a mut PgConnection> {
         self.inner.lock().expect("error while locking mutex for database connection")
     }
 }
-pub type Memory = VolatileResourcesStorage;
 
 pub(crate) mod error {
     use std::fmt::{Debug, Display, Formatter};

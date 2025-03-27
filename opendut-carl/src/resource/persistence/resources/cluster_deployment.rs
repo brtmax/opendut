@@ -3,70 +3,51 @@ use std::collections::HashMap;
 use redb::{ReadableTable, TableDefinition};
 use uuid::Uuid;
 use crate::resource::persistence::error::PersistenceResult;
-use crate::resource::persistence::Storage;
+use crate::resource::persistence::{Db, DbMut, Memory};
 
 use super::Persistable;
 
 impl Persistable for ClusterDeployment {
-    fn insert(self, cluster_id: ClusterId, storage: &mut Storage) -> PersistenceResult<()> {
-        let mut table = storage.db.open_table(CLUSTER_DEPLOYMENT_TABLE).unwrap(); //TODO don't unwrap
-
+    fn insert(self, cluster_id: ClusterId, _: &mut Memory, db: DbMut) -> PersistenceResult<()> {
         let key = cluster_id.0.as_bytes().as_slice();
 
-        // let value = { //TODO
-        //     let PeerDescriptor { id, name, location, network, topology, executors } = self;
-        //     SerializablePeerDescriptor {
-        //         id, name, location, network, topology, executors,
-        //     }
-        // };
         let value = self;
         let value = serde_json::to_string(&value).unwrap(); //TODO don't unwrap
 
+        let mut table = db.open_table(CLUSTER_DEPLOYMENT_TABLE).unwrap(); //TODO don't unwrap
         table.insert(key, value).unwrap(); //TODO don't unwrap
 
         Ok(())
     }
 
-    fn remove(cluster_id: ClusterId, storage: &mut Storage) -> PersistenceResult<Option<Self>> {
-        let mut table = storage.db.open_table(CLUSTER_DEPLOYMENT_TABLE).unwrap(); //TODO don't unwrap
+    fn remove(cluster_id: ClusterId, _: &mut Memory, db: DbMut) -> PersistenceResult<Option<Self>> {
+        let mut table = db.open_table(CLUSTER_DEPLOYMENT_TABLE).unwrap(); //TODO don't unwrap
 
         let key = cluster_id.0.as_bytes().as_slice();
 
         let value = table.remove(key).unwrap() //TODO don't unwrap
             .map(|value| {
-                let value = serde_json::from_str::<ClusterDeployment>(&value.value()).unwrap(); //TODO don't unwrap
-
-                // let value = {
-                //     let SerializablePeerDescriptor { id, name, location, network, topology, executors } = peer_descriptor;
-                //     PeerDescriptor { id, name, location, network, topology, executors }
-                // };
-                value
+                serde_json::from_str::<ClusterDeployment>(&value.value()).unwrap() //TODO don't unwrap
             });
 
         Ok(value)
     }
 
-    fn get(cluster_id: ClusterId, storage: &Storage) -> PersistenceResult<Option<Self>> {
-        let table = storage.db.open_table(CLUSTER_DEPLOYMENT_TABLE).unwrap(); //TODO don't unwrap
+    fn get(cluster_id: ClusterId, _: &Memory, db: Db) -> PersistenceResult<Option<Self>> {
+        let table = db.open_table(CLUSTER_DEPLOYMENT_TABLE).unwrap(); //TODO don't unwrap
 
         let key = cluster_id.0.as_bytes().as_slice();
 
         let value = table.get(key).unwrap() //TODO don't unwrap
             .map(|value| {
-                let value = serde_json::from_str::<ClusterDeployment>(&value.value()).unwrap(); //TODO don't unwrap
-
-                // let value = {
-                //     let SerializablePeerDescriptor { id, name, location, network, topology, executors } = value;
-                //     PeerDescriptor { id, name, location, network, topology, executors }
-                // };
-                value
+                serde_json::from_str::<ClusterDeployment>(&value.value()).unwrap() //TODO don't unwrap
             });
 
         Ok(value)
     }
 
-    fn list(storage: &Storage) -> PersistenceResult<HashMap<Self::Id, Self>> {
-        let table = storage.db.open_table(CLUSTER_DEPLOYMENT_TABLE).unwrap(); //TODO don't unwrap
+    fn list(_: &Memory, db: Db) -> PersistenceResult<HashMap<Self::Id, Self>> {
+        let table = db.open_table(CLUSTER_DEPLOYMENT_TABLE).unwrap(); //TODO don't unwrap
 
         let value = table.iter().unwrap() //TODO don't unwrap
             .map(|value| {
@@ -74,10 +55,6 @@ impl Persistable for ClusterDeployment {
                 let id = ClusterId::from(Uuid::from_slice(key.value()).unwrap()); //TODO don't unwrap
 
                 let value = serde_json::from_str::<ClusterDeployment>(&value.value()).unwrap(); //TODO don't unwrap
-                // let value = {
-                //     let SerializablePeerDescriptor { id, name, location, network, topology, executors } = value;
-                //     PeerDescriptor { id, name, location, network, topology, executors }
-                // };
 
                 (id, value)
             })
