@@ -1,7 +1,3 @@
-use std::collections::HashMap;
-use std::path::PathBuf;
-use anyhow::anyhow;
-use url::Url;
 use crate::resource::api::global::GlobalResourcesRef;
 use crate::resource::api::resources::{RelayedSubscriptionEvents, Resources};
 use crate::resource::api::Resource;
@@ -11,6 +7,11 @@ use crate::resource::persistence::resources::Persistable;
 use crate::resource::storage::persistent::PersistentResourcesStorage;
 use crate::resource::storage::volatile::VolatileResourcesStorageHandle;
 use crate::resource::subscription::Subscribable;
+use anyhow::anyhow;
+use std::collections::HashMap;
+use std::fmt::Display;
+use std::path::PathBuf;
+use url::Url;
 
 pub mod volatile;
 pub mod persistent;
@@ -56,7 +57,7 @@ impl ResourceStorage {
     pub(super) async fn resources_mut<T, E, F>(&mut self, global: GlobalResourcesRef, code: F) -> PersistenceResult<(Result<T, E>, RelayedSubscriptionEvents)>
     where
         F: AsyncFnOnce(&mut Resources) -> Result<T, E>,
-        E: Send + Sync + 'static,
+        E: Display + Send + Sync + 'static,
     {
         match self {
             ResourceStorage::Persistent(storage) => storage.resources_mut(async |transaction| {

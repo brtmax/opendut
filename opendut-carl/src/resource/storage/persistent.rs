@@ -5,8 +5,8 @@ use crate::resource::persistence::resources::Persistable;
 use crate::resource::persistence::Storage;
 use crate::resource::storage::volatile::VolatileResourcesStorage;
 use crate::resource::storage::{DatabaseConnectInfo, Resource, ResourcesStorageApi};
-use std::any::Any;
 use std::collections::HashMap;
+use std::fmt::{Debug, Display};
 use std::sync::{Arc, Mutex};
 use tracing::debug;
 
@@ -18,9 +18,9 @@ impl PersistentResourcesStorage {
     pub async fn connect(database_connect_info: &DatabaseConnectInfo) -> Result<Self, ConnectError> {
         let _ = crate::resource::persistence::database::connect(database_connect_info).await?; //TODO remove or use for migration
 
-        let file = database_connect_info.file.clone();
+        let file = &database_connect_info.file;
 
-        let db = redb::Database::create(&file).unwrap(); //TODO don't unwrap
+        let db = redb::Database::create(file).unwrap(); //TODO don't unwrap
         debug!("Database file opened from: {file:?}");
 
         let memory = VolatileResourcesStorage::default();
@@ -55,7 +55,7 @@ impl PersistentResourcesStorage {
     pub async fn resources_mut<T, E, F>(&mut self, code: F) -> PersistenceResult<(Result<T, E>, RelayedSubscriptionEvents)>
     where
         F: AsyncFnOnce(PersistentResourcesTransaction) -> Result<T, E>,
-        E: Send + Sync + 'static,
+        E: Display + Send + Sync + 'static,
     {
         let mut relayed_subscription_events = RelayedSubscriptionEvents::default();
         let mut transaction = self.db.begin_write().unwrap(); //TODO don't unwrap
@@ -68,7 +68,15 @@ impl PersistentResourcesStorage {
 
             code(persistent_transaction).await
         };
-        transaction.commit().unwrap(); //TODO don't unwrap
+
+        match &result {
+            Ok(_) => {
+                transaction.commit().unwrap(); //TODO don't unwrap
+            }
+            Err(cause) => {
+                debug!("Not committing changes to the database due to error:\n  {cause}");
+            }
+        }
 
         Ok((result, relayed_subscription_events))
     }
@@ -169,6 +177,4 @@ impl PersistentResourcesTransaction<'_> {
 enum TransactionPassthroughError {
     #[error("Error returned by Diesel while performing transaction.")]
     Diesel(#[from] diesel::result::Error),
-    #[error("Error returned by the code executed within the transaction.")]
-    Passthrough(Box<dyn Any + Send + Sync>),
 }

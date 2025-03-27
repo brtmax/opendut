@@ -1,6 +1,7 @@
 use opendut_types::resources::Id;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::sync::{Arc, Mutex};
 
 use crate::resource::api::id::ResourceId;
@@ -36,7 +37,7 @@ impl VolatileResourcesStorageHandle {
     pub async fn resources_mut<T, E, F>(&mut self, code: F) -> PersistenceResult<(Result<T, E>, RelayedSubscriptionEvents)>
     where
         F: AsyncFnOnce(VolatileResourcesTransaction) -> Result<T, E>,
-        E: Send + Sync + 'static,
+        E: Display + Send + Sync + 'static,
     {
         let mut relayed_subscription_events = RelayedSubscriptionEvents::default();
 
